@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MAF 内容观察工作台</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo">MAF</span>
+    <div>
+      <h1>内容观察工作台</h1>
+      <p class="sub">拖入文本 → 时间轴 · 观察报告 · PPT · Word · PDF</p>
+    </div>
+  </div>
+  <div class="top-right">
+    <span class="pill" id="localStatus">检查本地模型…</span>
+    <span class="pill ghost" id="toolStatus">工具链…</span>
+    <button class="linkbtn" id="quitBtn" title="关闭应用">退出</button>
+  </div>
+</header>
+
+<main>
+  <!-- ① 投喂 -->
+  <section class="col">
+    <h2><span class="step">①</span>投喂材料</h2>
+    <div id="dropzone" class="dropzone" tabindex="0">
+      <div class="dz-icon">⇩</div>
+      <strong>把 .txt / .md 文本拖进来</strong>
+      <span>也可以点击这里选文件，或直接在下面粘贴</span>
+      <input type="file" id="fileInput" multiple
+             accept=".txt,.md,.markdown,.text,.log" hidden>
+    </div>
+    <ul id="fileList" class="files"></ul>
+    <textarea id="pasted" rows="6"
+      placeholder="在这里粘贴文本。建议每条自带日期，例如：&#10;2026-09-01 4.2 版本更新说明&#10;正文……"></textarea>
+    <div class="settings">
+      <label>主题词<input id="subject" value="原神"></label>
+      <label>类别<select id="kind"></select></label>
+      <label>切分方式<select id="mode"></select></label>
+    </div>
+    <div class="rowbtns">
+      <button id="parseBtn" class="ghost">解析预览</button>
+      <button id="clearBtn" class="ghost">清空</button>
+    </div>
+  </section>
+
+  <!-- ② 预览 -->
+  <section class="col">
+    <h2><span class="step">②</span>解析预览</h2>
+    <p class="meta" id="previewMeta">还没有内容。左边拖入或粘贴后点「解析预览」。</p>
+    <div class="tablewrap">
+      <table id="preview">
+        <thead>
+          <tr><th>#</th><th>日期</th><th>标题</th><th>类别</th><th>日期来源</th></tr>
+        </thead>
+        <tbody><tr class="empty"><td colspan="5">—</td></tr></tbody>
+      </table>
+    </div>
+    <p class="hint">日期可以在这里手改（YYYY-MM-DD）；留空表示「日期未知」，会排在时间轴末尾。</p>
+  </section>
+
+  <!-- ③ 输出 -->
+  <section class="col">
+    <h2><span class="step">③</span>生成与产物</h2>
+    <div class="checks">
+      <label><input type="checkbox" id="office" checked> 生成 PPT / Word / PDF</label>
+      <label><input type="checkbox" id="fill" checked> 缺日期时用本地模型补抽</label>
+      <label><input type="checkbox" id="cloud"> 报告改走云端模型（需凭据）</label>
+      <label><input type="checkbox" id="fresh" checked> 本次从空库开始</label>
+      <label><input type="checkbox" id="dry"> 试跑（占位文案，不调用模型）</label>
+    </div>
+    <p class="hint" id="localHint"></p>
+    <button id="genBtn" class="primary">开始生成</button>
+    <div class="bar"><div id="bar"></div></div>
+    <pre id="log" class="log"></pre>
+    <div class="outhead">
+      <span>产物</span>
+      <button class="linkbtn" id="revealOut">打开输出目录</button>
+    </div>
+    <ul id="artifacts" class="artifacts"><li class="empty">还没有产物</li></ul>
+    <p class="hint" id="outDirHint"></p>
+  </section>
+</main>
+
+<div id="toast" class="toast"></div>
+<script src="/app.js"></script>
+</body>
+</html>

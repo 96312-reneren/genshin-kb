@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>原神知识库 · Genshin Knowledge Base</title>
+<style>
+:root{
+  --bg:#f3f5f8; --card:#ffffff; --ink:#1b2027; --ink2:#5d6773; --ink3:#8e97a3;
+  --line:#e4e8ed; --line2:#eef1f5;
+  --teal:#0f8c86; --teal-soft:#e7f5f4; --gold:#bc851a; --gold-soft:#fdf4e3;
+  --red:#cf4a5c; --red-soft:#fdeef0; --blue:#3374c1; --blue-soft:#eaf2fc;
+  --purple:#7752c4; --purple-soft:#f1ecfb; --green:#2f8f5b; --green-soft:#e9f6ef;
+  --e-fire:#e2603f; --e-water:#3d8fd1; --e-wind:#3fae94; --e-thunder:#8b6ad0;
+  --e-grass:#74a832; --e-ice:#5fb5d8; --e-rock:#c9a227;
+  --shadow:0 1px 2px rgba(20,30,45,.05), 0 6px 18px rgba(20,30,45,.05);
+  --radius:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-size:14px; line-height:1.72;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--teal);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------- header ---------- */
+header{
+  background:linear-gradient(135deg,#0f8c86 0%,#0b6f6a 55%,#0a5a58 100%);
+  color:#fff; padding:22px 0 20px; position:relative; overflow:hidden;
+}
+header::after{
+  content:""; position:absolute; right:-60px; top:-60px; width:260px; height:260px;
+  border-radius:50%; background:rgba(255,255,255,.06);
+}
+.hwrap{max-width:1180px;margin:0 auto;padding:0 22px;position:relative;z-index:2}
+h1{margin:0;font-size:23px;letter-spacing:.5px;font-weight:650}
+.sub{margin-top:5px;font-size:12.5px;opacity:.86;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{
+  display:inline-block;padding:2px 10px;border-radius:20px;font-size:11.5px;
+  background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.24);
+}
+.chip.gold{background:rgba(255,214,130,.22);border-color:rgba(255,214,130,.42)}
+.searchbox{margin-top:14px;position:relative;max-width:430px}
+.searchbox input{
+  width:100%;padding:9px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.14);color:#fff;font-size:13px;outline:none;
+  font-family:inherit;
+}
+.searchbox input::placeholder{color:rgba(255,255,255,.7)}
+.searchbox input:focus{background:rgba(255,255,255,.22);border-color:#fff}
+#sr{position:absolute;left:0;right:0;top:44px;background:#fff;color:var(--ink);
+  border-radius:10px;box-shadow:0 12px 32px rgba(10,30,40,.24);max-height:400px;
+  overflow:auto;display:none;z-index:50;border:1px solid var(--line)}
+#sr .grp{padding:8px 14px;font-size:11.5px;color:var(--ink3);background:#fafbfc;
+  border-bottom:1px solid var(--line2);letter-spacing:.6px}
+#sr .it{padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--line2);font-size:13px}
+#sr .it:hover{background:var(--teal-soft)}
+#sr .it small{color:var(--ink3);margin-left:8px}
+
+/* ---------- nav ---------- */
+nav{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.94);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nwrap{max-width:1180px;margin:0 auto;padding:0 22px;display:flex;gap:2px;overflow-x:auto}
+.nwrap button{
+  border:0;background:none;font-family:inherit;font-size:13.5px;color:var(--ink2);
+  padding:13px 15px 11px;cursor:pointer;border-bottom:2.5px solid transparent;
+  white-space:nowrap;font-weight:500;transition:.15s;
+}
+.nwrap button:hover{color:var(--teal)}
+.nwrap button.on{color:var(--teal);border-bottom-color:var(--teal);font-weight:650}
+
+/* ---------- layout ---------- */
+main{max-width:1180px;margin:0 auto;padding:24px 22px 70px}
+section{display:none;animation:fade .22s ease}
+section.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:20px 22px;box-shadow:var(--shadow);margin-bottom:18px}
+h2{font-size:18px;margin:0 0 4px;font-weight:650;letter-spacing:.3px}
+h2 .en{font-size:11.5px;color:var(--ink3);font-weight:400;margin-left:8px;letter-spacing:.8px}
+h3{font-size:14.5px;margin:22px 0 10px;font-weight:650;color:var(--ink);
+  padding-left:10px;border-left:3px solid var(--teal)}
+h3:first-child{margin-top:4px}
+h4{font-size:13.5px;margin:16px 0 6px;font-weight:650;color:var(--ink2)}
+p{margin:8px 0}
+.lead{color:var(--ink2);font-size:13.5px;margin:6px 0 0}
+.muted{color:var(--ink3);font-size:12.5px}
+.hr{height:1px;background:var(--line2);margin:18px 0}
+
+/* ---------- kpi ---------- */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:15px 16px;box-shadow:var(--shadow)}
+.kpi .k{font-size:11.5px;color:var(--ink3);letter-spacing:.4px}
+.kpi .v{font-size:22px;font-weight:700;color:var(--teal);letter-spacing:-.4px;margin-top:3px;line-height:1.25}
+.kpi .v small{font-size:12px;font-weight:500;color:var(--ink2);letter-spacing:0}
+.kpi .n{font-size:11.5px;color:var(--ink3);margin-top:3px}
+.kpi.g .v{color:var(--gold)}
+.kpi.b .v{color:var(--blue)}
+.kpi.p .v{color:var(--purple)}
+
+/* ---------- flow ---------- */
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;margin:6px 0}
+.fnode{flex:1 1 150px;min-width:132px;background:#fbfcfd;border:1px solid var(--line);
+  border-radius:10px;padding:11px 12px;position:relative}
+.fnode .num{display:inline-flex;width:19px;height:19px;border-radius:50%;background:var(--teal);
+  color:#fff;font-size:11px;font-weight:700;align-items:center;justify-content:center;margin-bottom:5px}
+.fnode b{display:block;font-size:12.8px;font-weight:650;margin-bottom:2px}
+.fnode span{font-size:11.5px;color:var(--ink2);line-height:1.6;display:block}
+.fnode.pay{background:var(--gold-soft);border-color:#f0dfbb}
+.fnode.pay .num{background:var(--gold)}
+.farrow{display:flex;align-items:center;color:var(--ink3);font-size:16px;flex:0 0 auto}
+.loopback{margin-top:10px;background:var(--gold-soft);border:1px dashed #e3cb96;
+  border-radius:10px;padding:9px 14px;font-size:12.5px;color:#8a6414}
+
+/* ---------- timeline ---------- */
+.tl{display:flex;margin:8px 0 4px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+.tl div{flex:1;padding:10px 12px;font-size:12px;background:#fbfcfd;border-right:1px solid var(--line)}
+.tl div:last-child{border-right:0}
+.tl .half1{background:var(--teal-soft)}
+.tl .half2{background:#fdf1ec}
+.tl b{display:block;font-size:12.8px;margin-bottom:2px}
+
+/* ---------- bars ---------- */
+.bars{display:flex;flex-direction:column;gap:9px;margin:6px 0}
+.brow{display:grid;grid-template-columns:150px 1fr 92px;gap:10px;align-items:center;font-size:12.5px}
+.brow .lb{color:var(--ink2);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .tr{background:var(--line2);border-radius:5px;height:20px;overflow:hidden}
+.brow .fl{height:100%;border-radius:5px;background:var(--teal);transition:width .5s}
+.brow .vl{font-weight:650;color:var(--ink);font-size:12.5px}
+@media(max-width:640px){.brow{grid-template-columns:104px 1fr 74px;font-size:11.5px}}
+
+.stackbar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:5px 0;border:1px solid var(--line)}
+.stackbar i{display:block;height:100%;transition:.4s}
+.sklabel{display:flex;justify-content:space-between;font-size:12.5px;margin-top:2px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;font-size:12px;color:var(--ink2)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+
+/* ---------- tags ---------- */
+.tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.2px;
+  background:var(--teal-soft);color:#0b6f6a;margin:0 5px 5px 0;border:1px solid #d3ece9}
+.tag.gold{background:var(--gold-soft);color:#8a6414;border-color:#f0dfbb}
+.tag.blue{background:var(--blue-soft);color:#23579a;border-color:#d3e4f7}
+.tag.purple{background:var(--purple-soft);color:#553a92;border-color:#e2d8f6}
+.tag.red{background:var(--red-soft);color:#a83445;border-color:#f7d7dc}
+.tag.gray{background:#f1f3f6;color:var(--ink2);border-color:var(--line)}
+
+.el{display:inline-flex;align-items:center;gap:4px;font-size:11.2px;color:#fff;
+  padding:1px 8px;border-radius:20px;font-weight:600}
+.el.火{background:var(--e-fire)} .el.水{background:var(--e-water)}
+.el.风{background:var(--e-wind)} .el.雷{background:var(--e-thunder)}
+.el.草{background:var(--e-grass)} .el.冰{background:var(--e-ice)}
+.el.岩{background:var(--e-rock)}
+
+/* ---------- buttons ---------- */
+.filters{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 16px}
+.filters button{border:1px solid var(--line);background:#fff;font-family:inherit;
+  font-size:12.5px;padding:5px 13px;border-radius:20px;cursor:pointer;color:var(--ink2);transition:.15s}
+.filters button:hover{border-color:var(--teal);color:var(--teal)}
+.filters button.on{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:600}
+
+/* ---------- teams ---------- */
+.teams{display:grid;grid-template-columns:repeat(auto-fit,minmax(342px,1fr));gap:14px}
+@media(max-width:760px){.teams{grid-template-columns:1fr}}
+.team{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);overflow:hidden}
+.team .th{padding:15px 18px 12px;border-bottom:1px solid var(--line2)}
+.team .th .nm{font-size:15px;font-weight:650;display:flex;justify-content:space-between;
+  align-items:flex-start;gap:10px}
+.team .th .nm .arch{font-size:11.5px;color:var(--teal);background:var(--teal-soft);
+  padding:2px 9px;border-radius:20px;font-weight:600;white-space:nowrap;flex:0 0 auto}
+.team .th .tg{margin-top:8px}
+.team .tb{padding:12px 18px 16px}
+.team .sum{font-size:13px;color:var(--ink2);margin:0}
+.team details{margin-top:9px;border-top:1px dashed var(--line);padding-top:9px}
+.team details:first-of-type{border-top:0;padding-top:0;margin-top:12px}
+.team summary{cursor:pointer;font-size:12.6px;font-weight:650;color:var(--teal);
+  list-style:none;display:flex;align-items:center;gap:6px;user-select:none}
+.team summary::-webkit-details-marker{display:none}
+.team summary::before{content:"▸";font-size:11px;transition:.18s;display:inline-block}
+.team details[open] summary::before{transform:rotate(90deg)}
+.team details > div{font-size:12.7px;color:var(--ink2);padding:8px 0 2px 15px;line-height:1.75}
+.mem{display:flex;gap:9px;padding:6px 0;border-bottom:1px dotted var(--line2);font-size:12.7px}
+.mem:last-child{border-bottom:0}
+.mem .sl{flex:0 0 74px;color:var(--teal);font-weight:650}
+.mem .cn{flex:0 0 auto;font-weight:600}
+.mem .rn{color:var(--ink2);flex:1}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:12.7px;min-width:560px}
+th{text-align:left;padding:9px 11px;background:#f8fafb;color:var(--ink2);font-weight:650;
+  border-bottom:1.5px solid var(--line);white-space:nowrap;font-size:12.2px}
+td{padding:9px 11px;border-bottom:1px solid var(--line2);vertical-align:top;color:var(--ink)}
+tbody tr:hover{background:#fafcfd}
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+
+/* ---------- calculator ---------- */
+.calc{background:#fafcfd;border:1px solid var(--line);border-radius:11px;padding:16px 18px;margin-top:6px}
+.crow{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:12px;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-size:11.8px;color:var(--ink2)}
+.fld input,.fld select{font-family:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--line);
+  border-radius:7px;background:#fff;color:var(--ink);outline:none;min-width:96px}
+.fld input:focus,.fld select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(15,140,134,.1)}
+.fld input[type=range]{min-width:150px;padding:0;border:0;background:none}
+.out{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;margin-top:12px}
+.out div{background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.out .k{font-size:11.3px;color:var(--ink3)}
+.out .v{font-size:18px;font-weight:700;color:var(--teal);letter-spacing:-.3px}
+.out .v.warn{color:var(--red)}
+.out .v.good{color:var(--green)}
+
+/* ---------- misc ---------- */
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(288px,1fr));gap:14px}
+.note{background:var(--blue-soft);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;
+  padding:10px 14px;font-size:12.7px;color:#1f4e84;margin:12px 0}
+.note.warn{background:var(--red-soft);border-left-color:var(--red);color:#8f2f3d}
+.note.ok{background:var(--green-soft);border-left-color:var(--green);color:#1f6b41}
+.ops{counter-reset:o}
+.op{border:1px solid var(--line);border-radius:11px;margin-bottom:11px;overflow:hidden;background:var(--card)}
+.op summary{cursor:pointer;padding:13px 17px;font-size:13.6px;font-weight:650;list-style:none;
+  display:flex;gap:11px;align-items:center;user-select:none}
+.op summary::-webkit-details-marker{display:none}
+.op summary::before{counter-increment:o;content:counter(o);flex:0 0 22px;height:22px;
+  background:var(--teal-soft);color:var(--teal);border-radius:50%;font-size:11.5px;font-weight:700;
+  display:flex;align-items:center;justify-content:center}
+.op summary:hover{background:#fbfcfd}
+.op[open] summary{border-bottom:1px solid var(--line2);background:#fbfcfd}
+.op .bd{padding:14px 18px 18px}
+.lk{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+@media(max-width:640px){.lk{grid-template-columns:1fr}}
+.lk div{background:#fafcfd;border:1px solid var(--line);border-radius:9px;padding:10px 13px;font-size:12.6px;color:var(--ink2)}
+.lk div b{display:block;color:var(--ink);font-size:12px;margin-bottom:3px}
+.lk .join{background:var(--teal-soft);border-color:#d3ece9;grid-column:1/-1;color:#0b5c58}
+.ana{font-size:13.2px;color:var(--ink);line-height:1.85;border-left:3px solid var(--gold);
+  padding-left:14px;background:linear-gradient(90deg,rgba(253,244,227,.5),transparent 60%)}
+footer{border-top:1px solid var(--line);padding:22px;text-align:center;color:var(--ink3);font-size:12px}
+ul.tight{margin:6px 0;padding-left:20px}
+ul.tight li{margin:3px 0;font-size:13px}
+code{background:#f1f3f6;padding:1px 6px;border-radius:4px;font-size:12.2px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:#0b6f6a}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:5px;
+  background:#f1f3f6;color:var(--ink2);border:1px solid var(--line)}
+.pill.warnp{background:var(--red-soft);color:#a83445;border-color:#f7d7dc}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hwrap">
+    <h1>原神知识库 <span style="font-weight:400;font-size:15px;opacity:.8">Genshin Knowledge Base</span></h1>
+    <div class="sub">
+      <span class="chip" id="chipVer">数据基准 · 加载中</span>
+      <span class="chip">SQLite 24 张表</span>
+      <span class="chip gold">仅供个人学习与研究</span>
+    </div>
+    <div class="searchbox">
+      <input id="q" type="text" placeholder="搜索队伍 / 角色 / 机制 / 运营主题…" autocomplete="off">
+      <div id="sr"></div>
+    </div>
+  </div>
+</header>
+
+<nav><div class="nwrap" id="nav"></div></nav>
+
+<main>
+  <section id="tab-overview"></section>
+  <section id="tab-teams"></section>
+  <section id="tab-abyss"></section>
+  <section id="tab-ops"></section>
+  <section id="tab-incident"></section>
+  <section id="tab-materials"></section>
+  <section id="tab-resources"></section>
+  <section id="tab-chars"></section>
+  <section id="tab-data"></section>
+</main>
+
+<footer>
+  原神知识库 · 本地 SQLite + 静态可视化 · 数据为公开信息整理与个人分析，与米哈游无关联，不得用于商业用途。
+</footer>
+
+<script>
+/* ============================================================
+   数据
+   ============================================================ */
+const KB = @@KB_JSON@@;
+
+const TABS = [
+  ["overview","概览","Overview"],
+  ["teams","配队策略","Team Building"],
+  ["abyss","深境螺旋","Spiral Abyss"],
+  ["ops","运营机制","Content × Monetization"],
+  ["incident","事件复盘","Incident & Power Creep"],
+  ["materials","观察材料","Observation Materials"],
+  ["resources","养成资源","Resin & Resources"],
+  ["chars","角色速查","Characters"],
+  ["data","数据与来源","Data & Sources"]
+];
+
+const ELC = {"火":"#e2603f","水":"#3d8fd1","风":"#3fae94","雷":"#8b6ad0","草":"#74a832","冰":"#5fb5d8","岩":"#c9a227"};
+const esc = s => String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const fmt = n => (n==null||n==="")?"—":Number(n).toLocaleString("en-US");
+const mid = (a,b) => Math.round(((a||0)+(b==null?a:b))/2);
+const $ = s => document.querySelector(s);
+
+/* ============================================================
+   导航
+   ============================================================ */
+(function buildNav(){
+  const nav = $("#nav");
+  TABS.forEach(([id,cn,en],i)=>{
+    const b = document.createElement("button");
+    b.innerHTML = cn;
+    b.dataset.id = id;
+    if(i===0) b.classList.add("on");
+    b.onclick = ()=>go(id);
+    nav.appendChild(b);
+  });
+})();
+function go(id){
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.id===id));
+  document.querySelectorAll("main section").forEach(s=>s.classList.toggle("on",s.id==="tab-"+id));
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ============================================================
+   通用小组件
+   ============================================================ */
+function bars(rows, color, unit){
+  const max = Math.max(...rows.map(r=>r[1]))||1;
+  return '<div class="bars">'+rows.map(([lb,v,c])=>
+    '<div class="brow"><div class="lb" title="'+esc(lb)+'">'+esc(lb)+'</div>'+
+    '<div class="tr"><div class="fl" style="width:'+Math.max(2,v/max*100)+'%;background:'+(c||color)+'"></div></div>'+
+    '<div class="vl">'+fmt(v)+(unit||"")+'</div></div>').join("")+'</div>';
+}
+function elBadge(e){ return '<span class="el '+e+'">'+e+'</span>'; }
+function tag(t,cls){ return '<span class="tag '+(cls||"")+'">'+esc(t)+'</span>'; }
+function sectionHead(t,en,lead){
+  return '<div class="card"><h2>'+esc(t)+'<span class="en">'+esc(en)+'</span></h2>'+
+    (lead?'<p class="lead">'+lead+'</p>':'')+'</div>';
+}
+
+/* ============================================================
+   1. 概览
+   ============================================================ */
+(function overview(){
+  const g = KB.gacha.find(x=>x.banner.indexOf("角色活动")===0&&x.rarity==="5★");
+  const gw = KB.gacha.find(x=>x.banner.indexOf("武器活动")===0);
+  const mc = KB.monetization.find(x=>x.name.indexOf("空月祝福")===0);
+  const direct = KB.monetization.find(x=>x.name.indexOf("创世结晶直充")===0);
+
+  let h = sectionHead("概览","Overview",
+    "这一页回答三个问题：<b>这游戏怎么玩（配队）</b>、<b>每周要做的事怎么算（深渊）</b>、"+
+    "<b>内容的产出如何转换成收入（运营机制）</b>。下面六个数字是整个知识库的骨架。");
+
+  h += '<div class="kpis">'+
+    kpi("版本周期","42","天","固定 6 周一版 · 卡池分上半/下半各 21 天")+
+    kpi("深渊每期满星","600","<small>原石</small>","9-12 层 · 每月 1/16 日刷新 · 月约 1200","g")+
+    kpi("角色池五星","0.6%","","综合 1.6% · 90 抽硬保底 · 平均约 62.5 抽")+
+    kpi("武器池定轨","1","<small>命定值</small>","5.0 起由 2 点降为 1 点 · 最坏 160 抽","b")+
+    kpi("月卡单抽成本","1.6","<small>元/抽</small>","30 元 ≈ 3000 原石当量，全游戏最划算","p")+
+    kpi("直充单抽成本","16","<small>元/抽</small>","648 档无首充双倍；首充后约 8 元/抽")+
+    '</div>';
+
+  /* 闭环图 */
+  h += '<div class="card"><h2>内容与付费的闭环<span class="en">The Content–Monetization Loop</span></h2>'+
+    '<p class="lead">原神的商业模式不是「付钱就变强」，而是<b>用内容源源不断地制造「想要」</b>，'+
+    '再把「得到」这件事拆成可以标价的时间与确定性。下面这个循环解释了为什么它的付费设计如此克制却依然高效。</p>'+
+    '<div class="flow">'+
+      fnode(1,"版本内容更新","每 42 天推出新角色、新武器、新地图与剧情，为卡池提供叙事理由。")+
+      '<div class="farrow">→</div>'+
+      fnode(2,"免费资源产出","每日委托、深境螺旋、限时活动、地图探索持续产出原石。")+
+      '<div class="farrow">→</div>'+
+      fnode(3,"抽卡消耗原石","角色池与武器池限时开放，21 天一个决策窗口。")+
+    '</div>'+
+    '<div class="flow" style="margin-top:8px">'+
+      fnode(4,"新角色需要新素材","突破材料绑定新地图特产与新 BOSS，探索被强制拉回来。")+
+      '<div class="farrow">→</div>'+
+      fnode(5,"养成消耗树脂","树脂每日上限固定，刷取需求被切成有限的时间片。")+
+      '<div class="farrow">→</div>'+
+      '<div class="fnode pay" style="flex:1 1 150px"><span class="num">6</span><b>付费购买时间与确定性</b>'+
+      '<span>月卡绑日活、纪行卖养成速度、直充卖「不想功亏一篑」。</span></div>'+
+    '</div>'+
+    '<div class="loopback">⑥ 的营收被复投为 ① 下一代版本的内容预算 —— 闭环成立的关键是'+
+    '「① 的内容质量足够好」，一旦内容供给不足，整条链条会同时失去动力。</div></div>';
+
+  /* 版本节奏 */
+  h += '<div class="card"><h2>一个版本 42 天在发生什么<span class="en">Version Rhythm</span></h2>'+
+    '<div class="tl">'+
+      '<div class="half1"><b>上半 · 第 1-21 天</b>新五星角色首次登场、配套新武器、版本主线剧情开启</div>'+
+      '<div class="half2"><b>下半 · 第 22-42 天</b>第二名新角色或复刻角色、武器池轮换</div>'+
+      '<div><b>贯穿全版本</b>限时活动、深渊两期刷新（每月 1/16 日）、纪行等级推进</div>'+
+    '</div>'+
+    '<p class="lead" style="margin-top:10px">把 42 天对半切开是有意为之：玩家在一个版本内至少要做两到四次'+
+    '「抽不抽」的判断，每次决策都足够轻，不至于让人产生被逼迫感，但付费触点的密度翻了一倍。</p></div>';
+
+  /* 结构统计 */
+  const stat = [["配队方案",KB.teams.length],["角色条目",KB.characters.length],
+    ["元素反应",KB.reactions.length],["深渊机制",KB.abyss_mechanics.length],
+    ["运营分析",KB.operations.length],["膨胀观测",(KB.inflation_metrics||[]).length],
+    ["观察材料",(KB.maf_items||[]).length],
+    ["来源台账",KB.sources.length]];
+  h += '<div class="card"><h2>本知识库的构成<span class="en">What\'s Inside</span></h2>'+
+    bars(stat,"#0f8c86"," 条")+
+    '<p class="muted">数据以 SQLite 单文件存储于 <code>genshin_kb.db</code>，本页面由数据库实时导出，'+
+    '两者内容一致。</p></div>';
+
+  $("#tab-overview").innerHTML = h;
+})();
+
+function kpi(k,v,u,n,cls){
+  return '<div class="kpi '+(cls||"")+'"><div class="k">'+esc(k)+'</div>'+
+    '<div class="v">'+v+(u?' '+u:'')+'</div><div class="n">'+esc(n)+'</div></div>';
+}
+function fnode(n,t,d){
+  return '<div class="fnode"><span class="num">'+n+'</span><b>'+t+'</b><span>'+d+'</span></div>';
+}
+
+/* ============================================================
+   2. 配队策略
+   ============================================================ */
+(function teams(){
+  const archs = [];
+  KB.teams.forEach(t=>{ if(archs.indexOf(t.archetype)<0) archs.push(t.archetype); });
+
+  let h = sectionHead("配队策略","Team Building",
+    "配队的本质只有一句话：<b>让尽可能多的增益，在同一段输出窗口里叠加生效</b>。"+
+    "下面的每套方案都按「核心思路 / 循环手法 / 优势 / 劣势 / 深渊适配」五个维度拆开，"+
+    "而不是简单地列一串角色名。");
+
+  /* 方法论 */
+  h += '<div class="card"><h2>组队方法论<span class="en">How Teams Actually Work</span></h2>'+
+    '<h3>四个位置</h3><div class="grid2">'+
+      box("主C · Main DPS","站场时间最长、吃最多增益的那一个。判断标准不是「伤害最高」，"+
+        "而是「队伍的资源是否向他集中」。","#e2603f")+
+      box("副C · Sub DPS","后台输出，通常靠元素爆发或持续技能贡献伤害。副C的存在让队伍在切换角色时也不浪费输出窗口。","#3d8fd1")+
+      box("增益 · Buffer","减抗、增伤、攻击加成。增益的强度不取决于数值大小，而取决于<b>能不能覆盖主C的输出窗口</b>。","#bc851a")+
+      box("生存 · Sustainer","护盾或治疗。在高难度深渊里这不是可选项——深渊内无法使用料理，容错完全由队伍自己提供。","#2f8f5b")+
+    '</div>'+
+    '<div class="hr"></div>'+
+    '<h3>决定伤害上限的三个变量</h3>'+
+    '<ul class="tight">'+
+      '<li><b>元素附着与反应倍率</b>：增幅反应（蒸发 2.0× / 融化 2.0×）是伤害上限的主要来源；'+
+      '而剧变反应（超绽放、超载等）不吃暴击，伤害只与等级和元素精通挂钩——这是两条完全不同的成长曲线。</li>'+
+      '<li><b>抗性削减 × 减防</b>：减抗是乘算在大盘上的增益，堆叠多个减抗源的收益往往高于堆一条暴击词条。</li>'+
+      '<li><b>循环是否闭合</b>：能量回不上来，再高的面板也只能打半套。所有「看起来很强但打不出伤害」的队伍，'+
+      '九成问题出在循环上，而不是练度上。</li>'+
+    '</ul>'+
+    '<div class="note">配队最常见的误区是「堆输出」。实际决定胜负的往往是循环节奏与生存位——'+
+    '深渊里不能吃药，一次暴毙就要重开，容错率直接等于通过率。</div></div>';
+
+  /* 筛选 + 卡片 */
+  h += '<div class="card"><h2>方案库<span class="en">'+KB.teams.length+' Builds</span></h2>'+
+    '<p class="lead">点击卡片中的条目可展开细节。金数成本为粗略分级（低＝可全四星成型，中＝需 1-2 命五星，高＝需多名五星）。</p>'+
+    '<div class="filters" id="tf"></div><div class="teams" id="tlist"></div></div>';
+
+  /* 元素反应 */
+  h += '<div class="card"><h2>元素反应速查<span class="en">Reactions</span></h2>'+
+    '<p class="lead">所有配队策略的物理底层。倍率一栏中，<b>触发顺序决定倍率</b>——'+
+    '这正是配队时必须想清楚「谁去打谁」的原因。</p>'+
+    '<div class="tw"><table><thead><tr><th>反应</th><th>类别</th><th>元素组合</th>'+
+    '<th>基础倍率 / 效果</th><th>触发条件</th><th>说明</th></tr></thead><tbody>'+
+    KB.reactions.map(r=>'<tr><td><b>'+esc(r.name)+'</b></td>'+
+      '<td>'+tag(r.category, r.category==="增幅"?"red":r.category==="绽放"?"purple":r.category==="激化"?"blue":"gray")+'</td>'+
+      '<td>'+esc(r.elements)+'</td><td>'+esc(r.base_multiplier)+'</td>'+
+      '<td class="muted">'+esc(r.trigger)+'</td><td class="muted">'+esc(r.note)+'</td></tr>').join("")+
+    '</tbody></table></div></div>';
+
+  $("#tab-teams").innerHTML = h;
+
+  /* 筛选交互 */
+  const fw = $("#tf");
+  ["全部",...archs].forEach(a=>{
+    const b=document.createElement("button");
+    b.textContent=a; if(a==="全部")b.classList.add("on");
+    b.onclick=()=>{ fw.querySelectorAll("button").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+      renderTeams(a==="全部"?null:a); };
+    fw.appendChild(b);
+  });
+  renderTeams(null);
+
+  function renderTeams(f){
+    const list = KB.teams.filter(t=>!f||t.archetype===f);
+    $("#tlist").innerHTML = list.map(t=>{
+      const mem = KB.team_members.filter(m=>m.team_id===t.id);
+      return '<div class="team"><div class="th"><div class="nm"><span>'+esc(t.name)+'</span>'+
+        '<span class="arch">'+esc(t.archetype)+'</span></div><div class="tg">'+
+        tag("金数成本 "+t.cost_level, t.cost_level==="低"?"":t.cost_level==="中"?"gold":"red")+
+        tag("操作难度 "+t.difficulty, t.difficulty==="低"?"blue":t.difficulty==="中"?"gray":"gold")+
+        (t.core_reaction&&t.core_reaction!=="—"?tag(t.core_reaction,"purple"):"")+
+        '</div></div><div class="tb"><p class="sum">'+esc(t.summary)+'</p>'+
+        '<details><summary>队伍成员（'+mem.length+' 人）</summary><div>'+
+          mem.map(m=>'<div class="mem"><span class="sl">'+esc(m.slot)+'</span>'+
+            '<span class="cn">'+esc(m.char_name)+'</span><span class="rn">'+esc(m.role_note)+'</span></div>').join("")+
+        '</div></details>'+
+        '<details><summary>循环手法</summary><div>'+esc(t.rotation)+'</div></details>'+
+        '<details><summary>优势</summary><div>'+esc(t.strengths)+'</div></details>'+
+        '<details><summary>劣势 / 注意</summary><div>'+esc(t.weaknesses)+'</div></details>'+
+        '<details><summary>深渊适配</summary><div>'+esc(t.abyss_fit)+'</div></details>'+
+        '</div></div>';
+    }).join("") || '<p class="muted">该体系下暂无方案。</p>';
+  }
+})();
+
+function box(t,d,c){
+  return '<div style="border-left:3px solid '+c+';background:#fafcfd;border-radius:0 9px 9px 0;padding:11px 14px">'+
+    '<b style="font-size:13.2px">'+esc(t)+'</b><div style="font-size:12.7px;color:var(--ink2);margin-top:3px">'+d+'</div></div>';
+}
+
+/* ============================================================
+   3. 深境螺旋
+   ============================================================ */
+(function abyss(){
+  let h = sectionHead("深境螺旋","Spiral Abyss",
+    "深渊是原神唯一的<b>周期性练度检验场</b>，也是零氪玩家最稳定的原石来源。"+
+    "它同时承担着一个隐含的运营功能：定义「练度」这个商品值多少钱。");
+
+  h += '<div class="card"><h2>12 层结构<span class="en">Structure</span></h2>'+
+    '<p class="lead">每层 3 间，每间最高 3 星，一层最多 9 星。第 1-4 层为单队挑战；'+
+    '自第 5 层起每间分为上下半，需要两支队伍，且角色不可重复使用。</p>'+
+    '<div class="tw"><table><thead><tr><th>层</th><th>间数</th><th>队伍要求</th>'+
+    '<th>典型敌人</th><th>环境</th><th>奖励</th></tr></thead><tbody>'+
+    KB.abyss_floors.map(f=>'<tr><td><b>第 '+f.floor+' 层</b></td>'+
+      '<td class="num">'+f.chambers+'</td>'+
+      '<td>'+(f.halves===2?'上下半双队':'单队')+'</td>'+
+      '<td class="muted">'+esc(f.typical_enemies)+'</td>'+
+      '<td class="muted">'+esc(f.environment)+'</td>'+
+      '<td class="muted">'+esc(f.reward_note)+'</td></tr>').join("")+
+    '</tbody></table></div>'+
+    '<div class="note ok">每间可独立挑战，已获得的星数不会清空。打不满不必硬凹——'+
+    '奖励按已得星数结算，先拿能拿的，练度上来了再回来补。</div></div>';
+
+  /* 奖励计算器 */
+  h += '<div class="card"><h2>本期原石计算器<span class="en">Reward Calculator</span></h2>'+
+    '<p class="lead">拖动滑块填写第 9-12 层各自拿到的星数（0-9），估算本期与每月的原石收入。</p>'+
+    '<div class="calc"><div class="crow" id="abyssSliders"></div>'+
+    '<div class="out" id="abyssOut"></div>'+
+    '<p class="muted" style="margin-top:10px">换算方式：每层满星为 150 原石（每间 50），'+
+    '此处按星数线性折算，实际结算以游戏内每间奖励为准。</p></div></div>';
+
+  /* 奖励结构 */
+  h += '<div class="card"><h2>奖励结构<span class="en">Rewards</span></h2><div class="tw"><table>'+
+    '<thead><tr><th>范围</th><th>奖励</th><th>数量</th><th>刷新</th><th>说明</th></tr></thead><tbody>'+
+    KB.abyss_rewards.map(r=>'<tr><td><b>'+esc(r.scope)+'</b></td><td>'+esc(r.item)+'</td>'+
+      '<td>'+esc(r.amount)+'</td><td>'+tag(r.period, r.period.indexOf("每")===0?"gold":"gray")+'</td>'+
+      '<td class="muted">'+esc(r.note)+'</td></tr>').join("")+
+    '</tbody></table></div></div>';
+
+  /* 机制 */
+  h += '<div class="card"><h2>机制与应对<span class="en">Mechanics</span></h2>'+
+    '<div class="ops">'+KB.abyss_mechanics.map(m=>
+      '<details class="op"><summary>'+esc(m.name)+'</summary><div class="bd">'+
+      '<div class="lk"><div><b>是什么</b>'+esc(m.description)+'</div>'+
+      '<div class="join"><b>怎么应对</b>'+esc(m.strategy)+'</div></div></div></details>').join("")+
+    '</div>'+
+    '<div class="note warn">深渊内<b>无法使用料理</b>回复生命值，生存完全依赖队伍自身。'+
+    '高难度层没有护盾或治疗位，容错率会低到无法通过——这一点比面板数值重要得多。</div></div>';
+
+  $("#tab-abyss").innerHTML = h;
+
+  /* 滑块 */
+  const floors=[9,10,11,12], vals={9:9,10:9,11:9,12:9};
+  $("#abyssSliders").innerHTML = floors.map(f=>
+    '<div class="fld"><label>第 '+f+' 层星数 <b id="sv'+f+'">9</b></label>'+
+    '<input type="range" min="0" max="9" value="9" data-f="'+f+'"></div>').join("");
+  $("#abyssSliders").querySelectorAll("input").forEach(inp=>{
+    inp.oninput = ()=>{ vals[inp.dataset.f]=+inp.value; $("#sv"+inp.dataset.f).textContent=inp.value; calc(); };
+  });
+  function calc(){
+    const total = floors.reduce((s,f)=> s + vals[f]/9*150, 0);
+    const stars = floors.reduce((s,f)=> s + vals[f], 0);
+    const pct = (total/600*100);
+    $("#abyssOut").innerHTML =
+      out("第 9-12 层星数", stars+" / 36")+
+      out("本期原石", Math.round(total)+" 原石")+
+      out("每月（约两期）", Math.round(total*2)+" 原石")+
+      out("占满星比例", pct.toFixed(0)+"%", pct>=100?"good":pct>=60?"":"warn")+
+      out("折算抽数（本期）", (total/160).toFixed(2)+" 抽");
+  }
+  calc();
+})();
+function out(k,v,cls){
+  return '<div><div class="k">'+esc(k)+'</div><div class="v '+(cls||"")+'">'+esc(v)+'</div></div>';
+}
+
+/* ============================================================
+   4. 运营机制
+   ============================================================ */
+(function ops(){
+  let h = sectionHead("运营机制","Content × Monetization",
+    "这一部分是整个知识库的重点。<b>原神的盈利方式不是「卖强度」，而是「卖时间与确定性」</b>。"+
+    "下面把每一条游戏内容与它对应的付费设计拆开对照，并给出评注。");
+
+  /* 付费档位对比 */
+  const rows = [];
+  KB.monetization.forEach(m=>{ if(m.cny_per_pull && m.kind!=="外观")
+    rows.push([m.name.replace(/（.*?）/,""), +m.cny_per_pull.toFixed(2), m.cny_per_pull>10?"#cf4a5c":"#0f8c86"]); });
+  rows.push(["首充双倍（648 档折算）", 8.0, "#bc851a"]);
+  rows.sort((a,b)=>a[1]-b[1]);
+  h += '<div class="card"><h2>同一颗原石，价格可以差 10 倍<span class="en">Price Ladder</span></h2>'+
+    '<p class="lead">这是整个付费体系最核心的一张图：<b>单抽成本随付费档位呈阶梯式上升</b>。'+
+    '低价档存在的意义是降低第一次付费的心理门槛，高价档服务的是「差一点就拿到」的确定性需求。</p>'+
+    bars(rows,"#0f8c86"," 元/抽")+
+    '<p class="muted">月卡约 1.6 元/抽，而常规直充约 16 元/抽。差额不是定价失误，而是设计：'+
+    '把最划算的价格留给愿意每天上线的玩家，把最贵的价格留给「现在就要」的玩家。</p></div>';
+
+  /* 原石产出 */
+  const base = KB.primogem_income.filter(r=>r.player_type==="0氪" && r.period.indexOf("不定期")<0);
+  const mk = KB.primogem_income.find(r=>r.player_type==="月卡");
+  const bp = KB.primogem_income.find(r=>r.player_type==="月卡+纪行");
+  const parts = base.map(r=>[r.source, mid(r.amount_low,r.amount_high)]);
+  const sum = a => a.reduce((s,x)=>s+x[1],0);
+  const p0 = sum(parts);
+  const p1 = p0 + mid(mk.amount_low,mk.amount_high);
+  const p2 = p1 + mid(bp.amount_low,bp.amount_high);
+  const palette = ["#0f8c86","#3d8fd1","#bc851a","#7752c4","#2f8f5b","#5fb5d8","#cf4a5c","#8b6ad0"];
+  const mk2 = (label,total,extra) => {
+    let segs = parts.map((p,i)=>'<i style="width:'+(p[1]/total*100)+'%;background:'+palette[i%8]+'" title="'+esc(p[0])+'"></i>').join("");
+    if(extra) segs += '<i style="width:'+(extra[1]/total*100)+'%;background:#d7dde4" title="'+esc(extra[0])+'"></i>';
+    return '<div style="margin-top:16px"><h4 style="margin:0 0 4px">'+label+'</h4>'+
+      '<div class="stackbar">'+segs+'</div>'+
+      '<div class="sklabel"><span class="muted">合计约 '+fmt(total)+' 原石</span>'+
+      '<span class="muted">≈ <b>'+(total/160).toFixed(0)+' 抽</b> / 版本</span></div></div>';
+  };
+  h += '<div class="card"><h2>一个版本能攒多少原石<span class="en">F2P Income</span></h2>'+
+    '<p class="lead">免费产出决定了「零氪能不能玩」。产出过高则付费动机消失，过低则用户流失——'+
+    '这个区间是被精心校准的。<span class="pill">社区测算 · 非官方数据</span></p>'+
+    mk2("零氪（全勤）", p0, null)+
+    mk2("月卡", p1, ["空月祝福", mid(mk.amount_low,mk.amount_high)])+
+    mk2("月卡 + 纪行", p2, ["珍珠纪行付费轨", mid(bp.amount_low,bp.amount_high)])+
+    (()=>{
+      const nm = KB.primogem_income.find(r=>r.period.indexOf("不定期")===0);
+      return nm? '<div class="note">此外，<b>含新地图的大版本</b>还会额外产出探索收益（'+
+        esc(nm.note)+'，约 '+fmt(nm.amount_low)+'-'+fmt(nm.amount_high)+' 原石），'+
+        '这是「大版本」与「小版本」免费产出差距的主要来源。</div>':'';
+    })()+
+    '<div class="legend">'+parts.map((p,i)=>'<span><i style="background:'+palette[i%8]+'"></i>'+esc(p[0])+'</span>').join("")+
+    '<span><i style="background:#d7dde4"></i>付费项</span></div>'+
+    '<p class="muted" style="margin-top:12px">以角色池平均约 62.5 抽出金计算，零氪大致'+
+    '<b>每 1-2 个版本可稳定获得一名限定五星</b>。「能拿到，但要等」——这就是免费产出被校准的目标。</p></div>';
+
+  /* 抽卡计算器 */
+  h += '<div class="card"><h2>抽卡成本计算器<span class="en">Gacha Cost Calculator</span></h2>'+
+    '<p class="lead">按官方公示的概率与保底规则估算。选择目标类型与当前保底进度，'+
+    '即可看到最坏情况与平均情况下的抽数、原石与人民币成本。</p>'+
+    '<div class="calc"><div class="crow">'+
+      '<div class="fld"><label>目标</label><select id="gT">'+
+        '<option value="char">限定五星角色（90 抽保底）</option>'+
+        '<option value="weapon">指定五星武器（80 抽保底 + 定轨）</option></select></div>'+
+      '<div class="fld"><label>当前保底已垫抽数</label><input id="gP" type="number" min="0" max="179" value="0"></div>'+
+      '<div class="fld" id="gSW"><label>是否已是大保底</label><select id="gS">'+
+        '<option value="1">否（下一次出金 50% 为 UP）</option>'+
+        '<option value="0">是（下一次出金必为 UP）</option></select></div>'+
+      '<div class="fld" id="gFW" style="display:none"><label>神铸定轨命定值</label><select id="gF">'+
+        '<option value="0">0 点</option><option value="1">1 点（下次出金必为定轨武器）</option></select></div>'+
+    '</div><div class="out" id="gOut"></div>'+
+    '<p class="muted" style="margin-top:10px">最坏情况＝保底次数打满；平均情况为期望值近似'+
+    '（角色池含捕获明光后约 90 抽，武器池约 95 抽）。此处为估算工具，不代表实际出货结果。</p></div></div>';
+
+  /* 运营分析 */
+  h += '<div class="card"><h2>11 条机制拆解<span class="en">Mechanism by Mechanism</span></h2>'+
+    '<p class="lead">每一条都按「内容侧做了什么 / 付费侧如何变现 / 两者的咬合点 / 评注」四层拆开。</p>'+
+    '<div class="ops">'+KB.operations.map(o=>
+      '<details class="op"><summary>'+esc(o.topic)+'</summary><div class="bd">'+
+      '<div class="lk">'+
+        '<div><b>内容侧</b>'+esc(o.content_side)+'</div>'+
+        '<div><b>付费侧</b>'+esc(o.monetization_side)+'</div>'+
+        '<div class="join"><b>咬合点</b>'+esc(o.linkage)+'</div>'+
+      '</div><div class="ana">'+esc(o.analysis)+'</div></div></details>').join("")+
+    '</div></div>';
+
+  /* 付费档位详表 */
+  h += '<div class="card"><h2>付费档位一览<span class="en">Monetization Tiers</span></h2>'+
+    '<p class="lead">价格与内容为公开信息整理；折算值按 1 抽 = 160 原石计算。</p>'+
+    KB.monetization.map(m=>'<details class="op"><summary>'+esc(m.name)+
+      ' &nbsp;<span class="pill">'+(m.price_cny!=null?("¥"+m.price_cny):"—")+'</span>'+
+      ' &nbsp;<span class="pill">'+esc(m.kind)+'</span>'+
+      (m.cny_per_pull?' &nbsp;<span class="pill">'+m.cny_per_pull+' 元/抽（折算）</span>':'')+
+      '</summary><div class="bd">'+
+      '<div style="font-size:12.8px;color:var(--ink2);margin-bottom:10px">'+esc(m.contents)+'</div>'+
+      '<div class="lk"><div><b>原石当量</b>'+(m.primogem_equiv!=null?fmt(m.primogem_equiv)+" 原石":"—")+'</div>'+
+      '<div><b>折算抽数</b>'+(m.pulls_equiv!=null?m.pulls_equiv+" 抽":"—")+'</div></div>'+
+      '<div class="ana">'+esc(m.design_intent)+'</div></div></details>').join("")+
+    '</div>';
+
+  /* 抽卡规则表 */
+  h += '<div class="card"><h2>抽卡规则速查<span class="en">Gacha Rules</span></h2>'+
+    '<p class="lead">原神各卡池的概率为<b>游戏内公示信息</b>。这里的整理便于横向对比，实际以游戏内为准。</p>'+
+    '<div class="tw"><table><thead><tr><th>卡池</th><th>星级</th><th>基础概率</th><th>综合概率</th>'+
+    '<th>硬保底</th><th>软保底起点</th><th>平均出金</th><th>UP 概率</th><th>保底规则</th></tr></thead><tbody>'+
+    KB.gacha.map(r=>'<tr><td><b>'+esc(r.banner)+'</b></td><td>'+esc(r.rarity)+'</td>'+
+      '<td class="num">'+esc(r.base_rate)+'</td><td class="num">'+esc(r.comprehensive_rate)+'</td>'+
+      '<td class="num">'+(r.hard_pity||"—")+'</td><td class="num">'+(r.soft_pity_start||"—")+'</td>'+
+      '<td>'+esc(r.avg_pulls)+'</td><td>'+esc(r.up_rate)+'</td>'+
+      '<td class="muted">'+esc(r.guarantee_rule)+'</td></tr>').join("")+
+    '</tbody></table></div>'+
+    '<div class="note">关键区别：角色池是 <b>50/50</b>（歪了下次必中，最坏 180 抽）；'+
+    '武器池是 <b>75/25</b>，且只有抽到另一把当期武器才累积命定值——抽到常驻武器不给命定值，'+
+    '这是很多玩家误解的地方。</div></div>';
+
+  $("#tab-ops").innerHTML = h;
+
+  /* 计算器逻辑 */
+  const P_PRIMO = 160;
+  function gachaCalc(){
+    const type = $("#gT").value;
+    const pity = Math.max(0, +$("#gP").value||0);
+    $("#gSW").style.display = type==="char" ? "" : "none";
+    $("#gFW").style.display = type==="weapon" ? "" : "none";
+    let worst, avg, label;
+    if(type==="char"){
+      const big = $("#gS").value==="0";
+      worst = (big?90:180) - pity;
+      avg = Math.max(1, 90 - pity);
+      label = big?"大保底":"小保底";
+    }else{
+      const fate = $("#gF").value==="1";
+      worst = (fate?80:160) - pity;
+      avg = Math.max(1, 95 - pity);
+      label = fate?"已有 1 点命定值":"0 点命定值";
+    }
+    worst = Math.max(0,worst);
+    const primo = worst*P_PRIMO;
+    const primoAvg = Math.round(avg)*P_PRIMO;
+    $("#gOut").innerHTML =
+      out("当前状态", label)+
+      out("最坏还需抽数", worst+" 抽", worst>120?"warn":"")+
+      out("最坏所需原石", fmt(primo))+
+      out("平均还需抽数", Math.round(avg)+" 抽")+
+      out("平均所需原石", fmt(primoAvg))+
+      out("最坏 · 月卡成本", "¥"+(primo/3000*30).toFixed(0), "good")+
+      out("最坏 · 直充成本", "¥"+(primo/P_PRIMO*16).toFixed(0), "warn")+
+      out("最坏 · 需攒版本数", (primo/9310).toFixed(1)+" 个", "");
+  }
+  ["gT","gP","gS","gF"].forEach(id=>{
+    const e=$("#"+id); e.oninput=()=>gachaCalc(); e.onchange=()=>gachaCalc();
+  });
+  gachaCalc();
+})();
+
+/* ============================================================
+   5. 事件复盘：那维莱特 4.8 修复回退
+   ============================================================ */
+(function incident(){
+  const inc = (KB.incidents||[])[0];
+  if(!inc){ $("#tab-incident").innerHTML='<div class="card"><p class="muted">暂无事件数据。</p></div>'; return; }
+  const tl = (KB.incident_timeline||[]).filter(x=>x.incident_id===inc.id);
+  const im = (KB.incident_impacts||[]).filter(x=>x.incident_id===inc.id);
+  const imx = KB.inflation_metrics||[];
+
+  const dt = d => d==="上升"?"red":(d==="下降"?"blue":(d==="持平"?"gray":"purple"));
+  const cf = c => c==="高"?"gold":(c==="中"?"blue":"gray");
+
+  function metricTable(rows){
+    return '<div class="tw"><table><thead><tr><th>指标</th><th>观测区间</th><th>观测值</th>'+
+      '<th>方向</th><th>数据性质</th><th>来源口径</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr><td><b>'+esc(r.metric)+'</b></td><td class="muted">'+esc(r.period)+'</td>'+
+        '<td class="num">'+esc(r.value_text)+'</td>'+
+        '<td>'+tag(r.direction,dt(r.direction))+'</td>'+
+        '<td>'+tag(r.nature,r.nature==="官方公示"||r.nature==="官方公告"?"gold":"gray")+'</td>'+
+        '<td class="muted">'+esc(r.source_note)+(r.note?'<br><span style="font-size:11px">'+esc(r.note)+'</span>':'')+'</td></tr>').join("")+
+      '</tbody></table></div>';
+  }
+
+  let h = sectionHead("事件复盘：那维莱特高速旋转修复回退",
+    "Incident Review: The Neuvillette Rollback",
+    "2024 年 7 月，一次针对<b>已上线角色</b>的「bug 修复」在 24 小时内被官方自己推翻、道歉并全服补偿。"+
+    "账面看，这只是一次公关失误；结构上看，它锁死了原神后续强度迭代的<b>调节方向</b>——"+
+    "此后再想让环境变难，只能往上加，不能往下改。");
+
+  /* 速览 */
+  h += '<div class="card"><h2>事件速览<span class="en">At a Glance</span></h2>'+
+    '<div class="kpis">'+
+      kpi("涉事版本","4.8","<small>2024-07-17 更新</small>","修复随版本实装")+
+      kpi("修复上线","07-17","<small>当日即引发反弹</small>","重击旋转速率被限制")+
+      kpi("回退公告","07-18","<small>次日</small>","官方承认是自身疏忽","b")+
+      kpi("全服补偿","1600","<small>原石</small>","约合 10 抽，按商业档位折合数十元","g")+
+      kpi("事件定性","信任成本","","改动的是信任，不是数值","p")+
+    '</div>'+
+    '<p class="lead">'+esc(inc.summary)+'</p>'+
+    '<div class="grid2">'+
+      '<div><h3>起因<span class="en">Trigger</span></h3><p class="muted">'+esc(inc.trigger)+'</p></div>'+
+      '<div><h3>根因判断<span class="en">Root Cause</span></h3><p class="muted">'+esc(inc.root_cause)+'</p></div>'+
+    '</div>'+
+    '<div class="note warn"><b>口径说明：</b>'+esc(inc.compliance_note)+'</div></div>';
+
+  /* 时间线 */
+  h += '<div class="card"><h2>从修复到回退的 24 小时<span class="en">Timeline</span></h2>'+
+    '<div class="tl">'+
+    tl.map(t=>'<div><b>'+esc(t.date_label)+' · '+esc(t.actor)+'</b>'+esc(t.event)+
+      '<div class="muted" style="font-size:11.5px;margin-top:2px">依据：'+esc(t.evidence)+'</div></div>').join("")+
+    '</div></div>';
+
+  /* 官方处理 */
+  h += '<div class="card"><h2>官方处理与其中两句关键表述<span class="en">Official Response</span></h2>'+
+    '<p class="lead">'+esc(inc.official_response)+'</p>'+
+    '<div class="grid2">'+
+      '<div class="card" style="margin:0"><h3>① 关于「已上线角色」<span class="en">Released Characters</span></h3>'+
+      '<p class="muted">公告的核心理由可以概括为：对上线的角色做任何修改，无论初衷如何，'+
+      '都可能伤及玩家长期给予的支持与信任。这句话把「不削弱已售角色」从一种行业惯例，'+
+      '升格为一次<b>公开承诺</b>。</p></div>'+
+      '<div class="card" style="margin:0"><h3>② 关于「未来的谨慎」<span class="en">More Cautious</span></h3>'+
+      '<p class="muted">公告同时表示，后续在与已上线内容相关的决定上会更加谨慎。'+
+      '这等于提前给所有「调整旧角色」的方案加了一道审批门槛——'+
+      '改动本身没被禁止，但它的<b>预期成本被公开抬高了</b>。</p></div>'+
+    '</div>'+
+    '<div class="note ok"><b>补偿结构：</b>'+esc(inc.compensation)+
+    '　按项目内抽卡数据，角色池最坏 180 抽、武器池 160 抽，1600 原石约等于 10 抽，'+
+    '相当于把「一次失败的改动」明码标价。</div></div>';
+
+  /* 数值膨胀两条曲线 */
+  const demand = imx.filter(r=>r.category==="需求侧·深渊");
+  const supply = imx.filter(r=>r.category==="供给侧·角色");
+  const mech   = imx.filter(r=>r.category==="机制侧");
+  const money  = imx.filter(r=>r.category==="商业化");
+
+  h += '<div class="card"><h2>数值膨胀：把「膨胀」拆成两条曲线<span class="en">Power Creep, Two Curves</span></h2>'+
+    '<p class="lead">「数值膨胀」是一个含糊的词。本项目把它拆成两条可分别观测的曲线：'+
+    '<b>需求侧</b>是深渊需要多高的输出才能满星，<b>供给侧</b>是玩家实际能打出多高的输出。'+
+    '两者同时上移，才叫膨胀；只有一侧上移，那叫门槛变化。</p>'+
+    '<h3>需求侧 · 深渊敌人的血条<span class="en">Demand Side</span></h3>'+
+    metricTable(demand)+
+    '<p class="muted">注意：上述血量口径只统计敌人血条，不含护盾、狂猎层数等特殊机制；'+
+    '若计入机制，实际门槛高于表中数字。数据来自玩家社群的逐版本统计，属于<b>社区测算</b>，不是官方公示。</p>'+
+    '<h3>供给侧 · 队伍输出天花板<span class="en">Supply Side</span></h3>'+
+    metricTable(supply)+
+    '<p class="muted">DPS 数字受配装、命座、操作影响极大，同一时期不同统计口径可以差出一倍以上。'+
+    '这里只用<b>量级与变化方向</b>，不引用具体数值作为结论依据。</p>'+
+    '</div>';
+
+  h += '<div class="card"><h2>机制侧与商业化侧的同步位移<span class="en">Mechanics &amp; Revenue</span></h2>'+
+    '<h3>机制与获取成本<span class="en">Mechanics</span></h3>'+ metricTable(mech)+
+    '<h3>运营侧指标<span class="en">Revenue</span></h3>'+ metricTable(money)+
+    '<div class="note warn">商业化指标来自第三方监测机构估算，仅用于描述趋势，'+
+    '不能作为原神实际营收的依据；且 2025 年的同比下滑由多重因素共同造成，'+
+    '本报告不将其单独归因于本次事件。</div></div>';
+
+  /* 因果链 */
+  h += '<div class="card"><h2>因果链：一次回退如何变成单向棘轮<span class="en">The Ratchet</span></h2>'+
+    '<div class="flow">'+
+      fnode(1,"修复翻车","对已上线角色的改动被证明会引发强烈反弹，且无法用数值辩护。")+
+      '<div class="farrow">→</div>'+
+      fnode(2,"公开承诺","官方书面承认「改已上线角色会伤害信任」，并承诺未来更谨慎。")+
+      '<div class="farrow">→</div>'+
+      fnode(3,"向下通道关闭","削弱旧角色/旧体系从「可考虑的方案」变成「高政治成本方案」。")+
+    '</div>'+
+    '<div class="flow" style="margin-top:8px">'+
+      fnode(4,"迭代只能向上","新角色必须比旧的更值得抽，环境必须比上期更需要新角色。")+
+      '<div class="farrow">→</div>'+
+      fnode(5,"深渊同步上移","血条与机制成为唯一合法的难度调节手段，只能加不能减。")+
+      '<div class="farrow">→</div>'+
+      '<div class="fnode pay" style="flex:1 1 150px"><span class="num">6</span><b>相对贬值加速</b>'+
+      '<span>老角色没被削弱，但被环境甩开——<b>贬值以「相对」的形式实现</b>，绕过了「不削弱」的承诺。</span></div>'+
+    '</div>'+
+    '<div class="loopback">关键就在这里：既然不能做减法，那就让分母变大。'+
+    '<b>「不削弱已售角色」与「让新角色有吸引力」两条约束同时成立时，单向膨胀几乎是唯一的解。</b>'+
+    '事件本身没有制造膨胀，它做的是关闭了唯一的泄压阀。</div></div>';
+
+  /* 长期影响条目 */
+  const dims = [...new Set(im.map(x=>x.dimension))];
+  h += '<div class="card"><h2>长期影响清单<span class="en">Long-run Impacts</span></h2>'+
+    '<p class="lead">按维度分组，每条都给出「影响 → 机制 → 观察依据 → 置信度」。'+
+    '置信度反映的是证据强度，不是作者的态度。</p>'+
+    dims.map(d=>{
+      const rows = im.filter(x=>x.dimension===d);
+      return '<h3>'+esc(d)+'<span class="en">'+rows.length+' 条</span></h3>'+
+        '<div class="grid2">'+ rows.map(r=>
+          '<div class="card" style="margin:0">'+
+            '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">'+
+              tag(r.horizon, r.horizon==="长期"?"red":(r.horizon==="中期"?"blue":"gray"))+
+              tag("置信度 "+r.confidence, cf(r.confidence))+
+              (r.related_op?'<span class="tag gray">对应运营机制 #'+r.related_op+'</span>':'')+
+            '</div>'+
+            '<p style="font-weight:650;margin:0 0 6px">'+esc(r.impact)+'</p>'+
+            '<p class="muted" style="margin:0 0 6px">'+esc(r.mechanism)+'</p>'+
+            '<p class="muted" style="font-size:11.5px;margin:0">观察依据：'+esc(r.evidence)+'</p>'+
+            (r.note?'<p class="muted" style="font-size:11.5px;margin:6px 0 0">'+esc(r.note)+'</p>':'')+
+          '</div>').join("")+'</div>';
+    }).join("");
+
+  /* 反面证据 */
+  h += '<h3>必须记录的反面证据<span class="en">Counter-evidence</span></h3>'+
+    '<div class="grid2">'+
+      '<div class="card" style="margin:0"><p style="font-weight:650;margin:0 0 6px">膨胀的主因是商业节奏，不是这次事件</p>'+
+      '<p class="muted" style="margin:0">42 天一个版本、每版本两张新卡池的结构，本身就要求强度持续抬升。'+
+      '事件发生在 4.8，而 4.x 期间的血量上移早已开始——<b>事件是加速器，不是发动机</b>。</p></div>'+
+      '<div class="card" style="margin:0"><p style="font-weight:650;margin:0 0 6px">官方选的是「加法」，不是「放养」</p>'+
+      '<p class="muted" style="margin:0">6.2 起官方对首批老角色推出加强计划，说明「不能削弱」并不等于「不管老角色」。'+
+      '这是约束下的第三条路：不做减法、也不接受旧体系直接报废。</p></div>'+
+      '<div class="card" style="margin:0"><p style="font-weight:650;margin:0 0 6px">「不削弱」并非始于 2024</p>'+
+      '<p class="muted" style="margin:0">2020 年的钟离事件后，官方对已上线角色做过大规模重做（1.3），'+
+      '方向同样是加强。这次回退强化了一条既有的路径依赖，而不是凭空创造了它。</p></div>'+
+      '<div class="card" style="margin:0"><p style="font-weight:650;margin:0 0 6px">缺少官方口径的膨胀数据</p>'+
+      '<p class="muted" style="margin:0">官方从未公开使用「数值膨胀」这一表述，也没有发布过深渊血量的完整历史数据。'+
+      '本项目所有血量与 DPS 数字均为社区测算，<b>只能支持趋势判断，不能支持精确结论</b>。</p></div>'+
+    '</div>'+
+    ((KB.incidents||[]).length>1 ?
+      '<h3>数据库中的对照事件<span class="en">Other Recorded Incidents</span></h3>'+
+      '<div class="tw"><table><thead><tr><th>代号</th><th>事件</th><th>版本</th><th>性质</th>'+
+      '<th>严重度</th><th>处理结果</th></tr></thead><tbody>'+
+      KB.incidents.map(i=>'<tr><td><code>'+esc(i.code)+'</code></td><td><b>'+esc(i.name)+'</b></td>'+
+        '<td class="num">'+esc(i.version)+'</td><td>'+esc(i.category)+'</td>'+
+        '<td>'+tag(i.severity, i.severity==="高"?"red":"gray")+'</td>'+
+        '<td class="muted">'+esc(i.compensation)+'</td></tr>').join("")+
+      '</tbody></table></div>'+
+      '<p class="muted">对照的意义：同样是「已上线内容被事后调整」，'+
+      '3.0 时期的那次机制限制没有换来回退与补偿，而 4.8 这次在 24 小时内就被推翻。'+
+      '<b>「不可削弱」这条约束不是一开始就存在的，它是在一次次事件中被逐步加固的。</b></p>'
+      : '')+
+    '</div>';
+
+  $("#tab-incident").innerHTML = h;
+})();
+
+/* ============================================================
+   6. 观察材料（maf 工作台的批量处理结果）
+   ============================================================ */
+(function materials(){
+  const runs  = KB.maf_runs||[],    items = KB.maf_items||[],
+        sums  = KB.maf_summaries||[], reps  = KB.maf_reports||[],
+        links = KB.maf_item_links||[];
+
+  const KIND_CN  = {notices:"公告", events:"活动", info:"资讯"};
+  const KIND_TAG = {notices:"blue", events:"purple", info:"gray"};
+
+  const manual = items.filter(i=>i.origin==="人工投喂");
+  const mirror = items.filter(i=>i.origin==="第三方接口镜像");
+  const primSum = {};
+  sums.filter(s=>s.is_primary).forEach(s=>{ primSum[s.item_id] = s; });
+  const linkByItem = {};
+  links.forEach(l=>{ (linkByItem[l.item_id] = linkByItem[l.item_id]||[]).push(l); });
+  const dated = items.map(i=>i.date_label).filter(d=>d && d!=="日期未知").sort();
+  const kinds = {};
+  items.forEach(i=>{ kinds[i.kind] = (kinds[i.kind]||0)+1; });
+  const kRows = ["notices","events","info"].filter(k=>kinds[k])
+    .map(k=>[KIND_CN[k]||k, kinds[k]]);
+  const primReps = reps.filter(r=>r.is_primary);
+
+  let h = sectionHead("观察材料","Observation Materials",
+    "这里的内容不是手写的，而是本仓库 <code>maf/</code> 子项目（MAF 内容观察工作台）"+
+    "<b>批量处理出来的结果</b>：材料条目、模型逐条概括、观察报告。"+
+    "<code>scripts/import_maf.py</code> 把它们从 maf 自己的 SQLite 库读进 <code>genshin_kb.db</code> 的 20-24 号表 —— "+
+    "所以这个页面和 maf 那两个库是同一份数据，不是转述。");
+
+  /* ---------- 速览 ---------- */
+  h += '<div class="kpis">'+
+    kpi("材料条目", fmt(items.length), "条", runs.length+" 个处理批次", "")+
+    kpi("人工投喂", fmt(manual.length), "条", "正文原样保留", "g")+
+    kpi("第三方接口镜像", fmt(mirror.length), "条", "只留标题与派生概括", "b")+
+    kpi("模型概括", fmt(sums.length), "条", "每条材料选 1 条主概括", "p")+
+    kpi("观察报告", fmt(reps.length), "份", "其中 "+primReps.length+" 份为主报告", "")+
+    kpi("最早材料", dated.length?dated[0]:"—", "", "最晚 "+(dated.length?dated[dated.length-1]:"—"), "")+
+    '</div>';
+
+  /* ---------- 两条线 ---------- */
+  h += '<div class="card"><h2>同样是「材料」，两条线的合规性质完全不同<span class="en">Two Lines</span></h2>'+
+    '<p class="lead">把这两种东西混成一张表、贴同一个标签，是这个项目最容易犯的错。'+
+    '所以它们在库里分开标注，在页面上也分开显示。</p>'+
+    '<div class="grid2">'+
+      '<div class="note ok"><b>人工投喂线 · '+manual.length+' 条</b><br>'+
+      '来源是使用者自己粘贴进来的文本（<code>source_api = manual</code>），既不是转载也不是抓取，'+
+      '因此<b>正文原样保留</b>在 <code>maf_items.body</code> 里，并公开标出这条材料是怎么来的。</div>'+
+      '<div class="note warn"><b>第三方接口镜像线 · '+mirror.length+' 条</b><br>'+
+      '这些条目历史上来自第三方接口镜像（api.ennead.cc → HoYoLab）。即便内容是公告，它也是上游的成段文本，'+
+      '落库就等于在本库里存了一份转载。因此<b>上游正文一律不入库</b>：'+
+      '只保留标题、发布时间、出处指针，以及 maf 自己生成的派生概括。</div>'+
+    '</div>'+
+    '<h3>批次台账<span class="en">maf_runs · '+runs.length+' 行</span></h3>'+
+    '<div class="tw"><table><thead><tr><th>批次</th><th>来源库</th><th>主题</th><th>线路</th>'+
+    '<th>开始</th><th>新增 / 更新</th><th>条目</th><th>备注</th></tr></thead><tbody>'+
+    runs.map(r=>'<tr><td class="num">'+r.orig_run_id+'</td><td><code>'+esc(r.source_db)+'</code></td>'+
+      '<td>'+esc(r.subject||"—")+'</td>'+
+      '<td>'+tag(r.origin, r.origin==="人工投喂"?"gold":"gray")+'</td>'+
+      '<td class="muted">'+esc((r.started_at||"").slice(0,10))+'</td>'+
+      '<td class="num">'+fmt(r.inserted)+' / '+fmt(r.updated)+'</td>'+
+      '<td class="num">'+fmt(r.items)+'</td>'+
+      '<td class="muted" style="font-size:11.5px">'+esc(r.note||"")+'</td></tr>').join("")+
+    '</tbody></table></div>'+
+    '<p class="muted" style="font-size:11.5px">采到 0 条的批次不是失败：条目按内容指纹去重，'+
+    '同一批公告在后续批次里会被「更新」而不是「新增」，所以只有最后一次碰到它的批次留着归属。'+
+    '这也是 <code>maf_items.news_run_id</code> 会被覆盖的原因 —— 原库就是这么设计的。</p></div>';
+
+  /* ---------- 材料清单 ---------- */
+  h += '<div class="card"><h2>材料清单<span class="en">maf_items · '+items.length+' 行</span></h2>'+
+    '<p class="lead">按发布时间排序，「日期未知」排最后 —— 与 maf 内部 '+
+    '<code>ORDER BY created_at ASC, post_id ASC</code> 的顺序一致。</p>'+
+    bars(kRows,"#0f8c86"," 条")+
+    '<div class="tw"><table><thead><tr><th>#</th><th>日期</th><th>标题</th><th>类别</th>'+
+    '<th>线路</th><th>主概括</th><th>挂到知识库</th></tr></thead><tbody>'+
+    items.map(i=>{
+      const s = primSum[i.id];
+      const lk = linkByItem[i.id]||[];
+      const lkTxt = lk.length
+        ? lk.map(l=>tag(l.kind+" · "+l.ref_key,
+            l.kind==="版本"?"blue":(l.kind==="角色"?"purple":"red"))).join(" ")
+        : '<span class="muted">—</span>';
+      const body = (i.origin==="人工投喂" && i.body)
+        ? '<details style="margin-top:4px"><summary class="muted" '+
+          'style="cursor:pointer;font-size:11.5px">看正文（自己粘贴的材料）</summary>'+
+          '<div style="font-size:12.4px;color:var(--ink2);margin-top:4px;white-space:pre-wrap">'+
+          esc(i.body)+'</div></details>'
+        : '<div class="muted" style="font-size:11px;margin-top:4px">正文未收录</div>';
+      return '<tr><td class="num">'+i.seq+'</td>'+
+        '<td class="muted" style="white-space:nowrap">'+esc(i.date_label)+'</td>'+
+        '<td>'+esc(i.title)+body+'</td>'+
+        '<td>'+tag(KIND_CN[i.kind]||i.kind, KIND_TAG[i.kind]||"gray")+'</td>'+
+        '<td>'+tag(i.origin, i.origin==="人工投喂"?"gold":"gray")+'</td>'+
+        '<td style="font-size:12.4px">'+esc(s?s.summary:"（无概括）")+
+          (s?'<div class="muted" style="font-size:11px">'+esc(s.backend)+' / '+esc(s.model)+'</div>':'')+'</td>'+
+        '<td>'+lkTxt+'</td></tr>';
+    }).join("")+
+    '</tbody></table></div></div>';
+
+  /* ---------- 关联 ---------- */
+  const verMap = {};
+  links.filter(l=>l.kind==="版本").forEach(l=>{
+    verMap[l.ref_key] = verMap[l.ref_key] || 0;
+    verMap[l.ref_key]++;
+  });
+  const verRows = Object.keys(verMap).sort().map(k=>["v"+k, verMap[k]]);
+  const kindsCount = {};
+  links.forEach(l=>{ kindsCount[l.kind] = (kindsCount[l.kind]||0)+1; });
+
+  h += '<div class="card"><h2>材料怎么挂到知识库上<span class="en">maf_item_links · '+links.length+' 行</span></h2>'+
+    '<p class="lead">桥接脚本会从材料的标题、主概括和正文里做<b>纯字符串匹配</b>，把材料挂到已有的角色、版本、运营事故上。'+
+    '匹配可以错，但必须能追溯，所以每条关联都记下命中词（<code>matched_by</code>）与把握程度（<code>confidence</code>）。</p>'+
+    '<div class="grid2">'+
+      kv("关联总数", fmt(links.length)+" 条")+
+      kv("按类型", Object.keys(kindsCount).length
+        ? Object.keys(kindsCount).map(k=>esc(k)+" "+kindsCount[k]).join(" · ")
+        : "—")+
+    '</div>'+
+    (verRows.length
+      ? '<h3>材料指向的版本</h3>'+bars(verRows,"#3d8fd1"," 条")+
+        '<p class="muted" style="font-size:11.5px">版本号是用正则从文本里抽的（<code>VERSION_RE</code>）；'+
+        '「月之七」这类命名按 <code>meta.game_version_note</code> 的规则换算成 6.6。'+
+        '所以同一条材料可能同时标出 6.6 与 7.0 —— 那是「预告 7.0」这种标题的真实含义。</p>'
+      : '')+
+    '<div class="note warn"><b>角色与运营事故的关联数是 0，这是数据事实，不是匹配失败。</b><br>'+
+    '这 54 条材料里<b>没有出现知识库收录的 61 位角色中的任何一位</b>——'+
+    '材料集中在 2026 年的 7.x 公告，而角色表最远只到 5.3 的纳塔角色。'+
+    '脚本不会把没出现的名字硬挂上去：宁可关联为空，也不要一条查不出出处的关联。</div></div>';
+
+  /* ---------- 观察报告 ---------- */
+  h += '<div class="card"><h2>观察报告<span class="en">maf_reports · '+reps.length+' 份</span></h2>'+
+    '<p class="lead">maf 把一批材料交给模型，产出两份东西：<b>时间轴</b>（按时间排列的条目叙事）与'+
+    '<b>观察报告</b>（对这批材料的归纳）。下面展开每个来源库各一份主报告'+
+    '（云端 &gt; 本地模型 &gt; 桩程序）。</p>'+
+    primReps.map(r=>'<details class="op"><summary>'+esc(r.origin)+' · '+esc(r.source_db)+
+      ' · '+r.items+' 条材料 · '+esc(r.span||"")+
+      ' <span class="muted">（'+esc(r.backend)+' / '+esc(r.model)+'）</span></summary>'+
+      '<div class="bd"><h3>时间轴</h3>'+
+      '<div style="white-space:pre-wrap;font-size:12.6px;color:var(--ink2)">'+esc(r.timeline||"")+'</div>'+
+      '<h3>观察报告</h3>'+
+      '<div class="ana" style="white-space:pre-wrap">'+esc(r.report||"")+'</div></div></details>').join("")+
+    '<p class="muted" style="font-size:11.5px">其余 '+(reps.length-primReps.length)+
+    ' 份报告是同一批材料在不同批次或不同模型下的重复处理结果，保留在库里但不在页面上展开。</p>'+
+    '<div class="note warn"><b>这些文字是模型生成的归纳，不是官方表述。</b>'+
+    '它可能读错、可能遗漏，也可能把两件事混成一件。把它当作「这批材料大概说了什么」的索引，'+
+    '需要引用时请回到材料本身的出处。</div></div>';
+
+  /* ---------- 怎么接进来的 ---------- */
+  h += '<div class="card"><h2>这条线是怎么接进来的<span class="en">How It Connects</span></h2>'+
+    '<ul class="tight">'+
+      '<li><b>maf 在 <code>maf/</code></b>：一个独立的内容观察工作台'+
+      '（本地模型概括 → 时间轴 → 观察报告 → PPT / Word / PDF）。'+
+      '它<b>不访问任何网络接口、不抓取任何站点、不使用任何游戏客户端文件</b>，'+
+      '唯一入口是使用者拖入或粘贴的文本。</li>'+
+      '<li><b>桥接脚本 <code>scripts/import_maf.py</code></b>：只用 <code>sqlite3</code> 直接读 maf 的两个库，'+
+      '<b>不 import maf 的 Python 模块</b> —— 所以跑它不需要 maf 的虚拟环境，也不会被 maf 的代码改动带崩。</li>'+
+      '<li><b>幂等</b>：每次运行先清空 20-24 号表再重建，跑多少次结果都一样；'+
+      '它不碰 1-19 号表（那些来自手写的 <code>scripts/kb_data.py</code>）。</li>'+
+      '<li><b>顺序</b>：<code>init_db.py</code> → <code>import_maf.py</code> → <code>build_site.py</code>。'+
+      '注意 <code>init_db.py</code> 会清空 maf 表，所以导入必须排在它后面。</li>'+
+      '<li><b>先看再导</b>：<code>python scripts/import_maf.py --dry-run</code> 只报告不写库。</li>'+
+    '</ul>'+
+    '<div class="note"><b>数字不交给模型</b>：这条设计沿用自 maf —— 日期靠规则解析'+
+    '（抽不到就写「日期未知」，绝不编），统计量由时间轴直接算出，模型只负责出要点。</div></div>';
+
+  $("#tab-materials").innerHTML = h;
+})();
+
+/* ============================================================
+   7. 养成资源
+   ============================================================ */
+(function resources(){
+  let h = sectionHead("养成资源与树脂","Resin & Resources",
+    "树脂是原神最核心的稀缺资源：<b>它把无限的刷取需求，压缩进有限的时间供给里</b>。"+
+    "理解树脂的收支，等于理解了整个养成节奏与付费动机的来源。");
+
+  h += '<div class="card"><h2>树脂的三个数字<span class="en">The Three Numbers</span></h2>'+
+    '<div class="kpis">'+
+      kpi("自然恢复速度","8","<small>分钟 / 点</small>","消耗掉的树脂会自动回补")+
+      kpi("持有上限","200","<small>点</small>","1.1 版 160 → 4.7 版提升至 200","b")+
+      kpi("每日自然恢复","180","<small>点</small>","从 0 回满 200 点需 26 小时 40 分","g")+
+    '</div>'+
+    '<div class="note warn">树脂<b>溢出即损失</b>：达到上限后将停止恢复。这就是「每天至少上线一次」的硬约束来源——'+
+    '它既是玩家习惯的养成机制，也是留存指标的基础。</div>'+
+    '<h4>补充方式</h4><ul class="tight">'+
+      '<li><b>脆弱树脂</b>：立即补充 60 点，无期限，主要来自纪行与冒险等阶奖励。</li>'+
+      '<li><b>须臾树脂</b>：补充 60 点但有使用期限，来自尘歌壶兑换。</li>'+
+      '<li><b>原石购买</b>：每日限 6 次，价格逐次递增（50→100→150→200 原石），越买越贵。</li>'+
+    '</ul><p class="muted">补充方式的价格递增设计很典型：它允许玩家应急，但不允许玩家无限地用钱抹平时间差。</p></div>';
+
+  h += '<div class="card"><h2>树脂去向一览<span class="en">Where Resin Goes</span></h2>'+
+    '<div class="tw"><table><thead><tr><th>用途</th><th>树脂消耗</th><th>每周限制</th>'+
+    '<th>产出</th><th>优先级</th><th>说明</th></tr></thead><tbody>'+
+    KB.resources.map(r=>'<tr><td><b>'+esc(r.name)+'</b></td><td class="num">'+r.resin_cost+' 点</td>'+
+      '<td class="muted">'+esc(r.weekly_limit)+'</td><td>'+esc(r.output)+'</td>'+
+      '<td>'+tag(r.priority, r.priority.indexOf("最高")>=0?"red":r.priority.indexOf("必做")>=0?"gold":"gray")+'</td>'+
+      '<td class="muted">'+esc(r.note)+'</td></tr>').join("")+
+    '</tbody></table></div>'+
+    '<div class="note ok">周本每周前 3 次为半价（30 点），是树脂性价比最高的去处；'+
+    '树脂紧张时优先保证这 3 次，再规划其余消耗。</div></div>';
+
+  h += '<div class="card"><h2>每日树脂预算<span class="en">Daily Resin Planner</span></h2>'+
+    '<p class="lead">拖动滑块规划每天的刷取安排，看看是否超出每日自然恢复量。'+
+    '每日自然恢复约 180 点，从 0 回满 200 点需要 26 小时 40 分。</p>'+
+    '<div class="calc"><div class="crow" id="rSliders"></div><div class="out" id="rOut"></div></div></div>';
+
+  $("#tab-resources").innerHTML = h;
+
+  const cfg=[["秘境 · 地脉（20 点/次）",20,12],["世界 BOSS（40 点/次）",40,4],["周本（按 60 点/次计）",60,3]];
+  const rv = cfg.map(c=>0);
+  $("#rSliders").innerHTML = cfg.map((c,i)=>
+    '<div class="fld"><label>'+c[0]+' <b id="rv'+i+'">0</b> 次</label>'+
+    '<input type="range" min="0" max="'+c[2]+'" value="0" data-i="'+i+'"></div>').join("");
+  $("#rSliders").querySelectorAll("input").forEach(inp=>{
+    inp.oninput=()=>{ rv[inp.dataset.i]=+inp.value; $("#rv"+inp.dataset.i).textContent=inp.value; rcalc(); };
+  });
+  function rcalc(){
+    const cost = cfg.reduce((s,c,i)=> s + c[1]*rv[i], 0);
+    const daily = 180, diff = cost - daily;
+    $("#rOut").innerHTML =
+      out("每日总消耗", cost+" 点", diff>0?"warn":"good")+
+      out("每日自然恢复", "180 点")+
+      out(diff>0?"超出部分":"剩余结余", Math.abs(diff)+" 点", diff>0?"warn":"good")+
+      out("折合脆弱树脂", (Math.max(0,diff)/60).toFixed(1)+" 个", diff>0?"warn":"")+
+      out("折合原石购买", diff>0?("约 "+Math.round(Math.max(0,diff)/60*50)+" 原石起"):"—", diff>0?"warn":"")+
+      out("等价每日上线次数", Math.ceil(Math.max(1,cost)/180)+" 次");
+  }
+  rcalc();
+})();
+
+/* ============================================================
+   8. 角色速查
+   ============================================================ */
+(function chars(){
+  let h = sectionHead("角色速查","Characters",
+    "这是一份为配队服务的<b>角色索引</b>，不是完整图鉴。"+
+    "字段只保留配队时会用到的信息（元素、武器、定位、是否限定）。"+
+    '<span class="pill warnp">标注「待核验」的角色来自较新版本，使用前请对照游戏内说明</span>');
+
+  const els=[...new Set(KB.characters.map(c=>c.element))];
+  const wps=[...new Set(KB.characters.map(c=>c.weapon))];
+  h += '<div class="card"><h2>筛选<span class="en">Filter</span></h2>'+
+    '<h4>元素</h4><div class="filters" id="cfE"></div>'+
+    '<h4>武器</h4><div class="filters" id="cfW"></div>'+
+    '<h4>星级</h4><div class="filters" id="cfR"></div>'+
+    '<div class="tw"><table><thead><tr><th>角色</th><th>元素</th><th>武器</th><th>星级</th>'+
+    '<th>地区</th><th>定位</th><th>获取</th><th>首登版本</th></tr></thead><tbody id="cbody"></tbody></table></div>'+
+    '<p class="muted" id="ccount"></p></div>';
+
+  $("#tab-chars").innerHTML = h;
+
+  let fe=null,fw=null,fr=null;
+  mk("cfE",els,els.map(e=>'<span class="el '+e+'">'+e+'</span>'),v=>{fe=v;rc();});
+  mk("cfW",wps,wps,v=>{fw=v;rc();});
+  mk("cfR",["5","4"],["5★","4★"],v=>{fr=v;rc();});
+
+  function mk(wrap,vals,labels,cb){
+    const w=$("#"+wrap);
+    [[null,"全部"],...vals.map((v,i)=>[v,labels[i]])].forEach(([v,lb],i)=>{
+      const b=document.createElement("button");
+      b.innerHTML=lb; if(i===0)b.classList.add("on");
+      b.onclick=()=>{ w.querySelectorAll("button").forEach(x=>x.classList.remove("on"));
+        b.classList.add("on"); cb(v); };
+      w.appendChild(b);
+    });
+  }
+  function rc(){
+    const list = KB.characters.filter(c=>
+      (!fe||c.element===fe)&&(!fw||c.weapon===fw)&&(!fr||c.rarity===+fr));
+    $("#cbody").innerHTML = list.map(c=>
+      '<tr><td><b>'+esc(c.name)+'</b> '+(c.confidence!=="高"?'<span class="pill warnp">待核验</span>':"")+'</td>'+
+      '<td>'+elBadge(c.element)+'</td><td>'+esc(c.weapon)+'</td>'+
+      '<td>'+'★'.repeat(c.rarity)+'</td><td>'+esc(c.region)+'</td>'+
+      '<td>'+(c.roles||"").split(",").map(r=>tag(r,"gray")).join("")+'</td>'+
+      '<td>'+(c.limited?"限定":"常驻")+'</td><td class="muted">'+esc(c.version_added)+'</td></tr>').join("")
+      || '<tr><td colspan="8" class="muted">没有匹配的角色。</td></tr>';
+    $("#ccount").textContent = "共 "+list.length+" 条（全库 "+KB.characters.length+" 条）";
+  }
+  rc();
+})();
+
+/* ============================================================
+   9. 数据与来源
+   ============================================================ */
+(function data(){
+  const M = Object.fromEntries(KB.meta.map(m=>[m.key,m.value]));
+  const tables = [["characters","角色",KB.characters.length],["teams","配队",KB.teams.length],
+    ["team_members","队伍成员",KB.team_members.length],["reactions","元素反应",KB.reactions.length],
+    ["abyss_floors","深渊楼层",KB.abyss_floors.length],["abyss_rewards","深渊奖励",KB.abyss_rewards.length],
+    ["abyss_mechanics","深渊机制",KB.abyss_mechanics.length],["monetization","付费档位",KB.monetization.length],
+    ["crystals","结晶档位",KB.crystals.length],["primogem_income","原石产出",KB.primogem_income.length],
+    ["gacha","抽卡规则",KB.gacha.length],["resources","养成资源",KB.resources.length],
+    ["operations","运营分析",KB.operations.length],["sources","来源台账",KB.sources.length],
+    ["incidents","运营事故档案",(KB.incidents||[]).length],
+    ["incident_timeline","事故时间线",(KB.incident_timeline||[]).length],
+    ["incident_impacts","长期影响条目",(KB.incident_impacts||[]).length],
+    ["inflation_metrics","膨胀观测指标",(KB.inflation_metrics||[]).length],
+    ["maf_runs","观察批次",(KB.maf_runs||[]).length],
+    ["maf_items","观察材料条目",(KB.maf_items||[]).length],
+    ["maf_summaries","材料概括",(KB.maf_summaries||[]).length],
+    ["maf_reports","观察报告",(KB.maf_reports||[]).length],
+    ["maf_item_links","材料关联",(KB.maf_item_links||[]).length],
+    ["meta","元信息",KB.meta.length]];
+
+  let h = sectionHead("数据与来源","Data & Sources","数据如何存储、从哪来、以及这个项目能用来做什么。");
+
+  h += '<div class="card"><h2>数据库<span class="en">SQLite</span></h2>'+
+    '<div class="grid2">'+
+      kv("数据库类型","SQLite 3（单文件关系型数据库）")+
+      kv("文件位置","<code>原神知识库/genshin_kb.db</code>")+
+      kv("数据基准版本",esc(M.baseline_version||""))+
+      kv("核验日期",esc(M.accessed_at||""))+
+      kv("表数量","24 张")+
+      kv("本页数据来源","由数据库实时导出，与 .db 文件内容一致")+
+    '</div>'+
+    '<h3>为什么选 SQLite</h3>'+
+    '<p>对这个项目来说，数据库的首要需求不是「扛并发」，而是<b>「单文件、零配置、可长期保存、随时能查」</b>。'+
+    'SQLite 把整个知识库压缩成一个文件，不需要安装服务、不需要账号，拷走就能带走；'+
+    '同时它又是标准的 SQL 数据库，可以用任意工具（DB Browser、DBeaver、Python、命令行）打开查询。'+
+    '对个人研究与学习的场景，这是成本最低、寿命最长的选择。</p>'+
+    '<h3>表结构</h3><div class="tw"><table><thead><tr><th>表名</th><th>内容</th>'+
+    '<th>行数</th></tr></thead><tbody>'+
+    tables.map(t=>'<tr><td><code>'+t[0]+'</code></td><td>'+esc(t[1])+'</td>'+
+      '<td class="num">'+t[2]+'</td></tr>').join("")+
+    '</tbody></table></div>'+
+    '<h3>怎么查</h3>'+
+    '<p><code>python scripts/query.py teams --archetype 蒸发</code><br>'+
+    '<code>python scripts/query.py sql "SELECT name,element,weapon FROM characters WHERE rarity=5 ORDER BY element"</code><br>'+
+    '也可以直接用任何 SQLite 客户端打开 <code>genshin_kb.db</code>。</p></div>';
+
+  h += '<div class="card"><h2>来源台账<span class="en">Sources</span></h2>'+
+    '<p class="lead">每一条数据的出处都记录在 <code>sources</code> 表里。'+
+    '优先采用官方公示信息（概率、价格、规则），第三方与社区内容仅用于<b>参数交叉核对</b>，'+
+    '并已用改写方式表述，不转载原文。</p>'+
+    '<div class="tw"><table><thead><tr><th>来源</th><th>发布方</th><th>支撑内容</th>'+
+    '<th>许可 / 说明</th><th>核验</th></tr></thead><tbody>'+
+    KB.sources.map(s=>'<tr><td>'+(s.url?'<a href="'+esc(s.url)+'" target="_blank" rel="noopener">'+esc(s.title)+'</a>':esc(s.title))+'</td>'+
+      '<td>'+esc(s.publisher)+'</td><td>'+esc(s.used_for)+'</td>'+
+      '<td class="muted">'+esc(s.license_note)+'</td><td class="muted">'+esc(s.accessed_at)+'</td></tr>').join("")+
+    '</tbody></table></div></div>';
+
+  h += '<div class="card"><h2>合规与使用范围<span class="en">Compliance</span></h2>'+
+    '<div class="note ok"><b>本项目为个人学习与研究用途</b>，不用于任何商业目的，不对外提供付费服务。</div>'+
+    '<ul class="tight">'+
+      '<li><b>不含游戏素材</b>：本库不存储、不转载《原神》的游戏内文本、立绘、图标、音频等受著作权保护的素材。</li>'+
+      '<li><b>数据为公开信息</b>：概率、价格、保底规则等取自游戏内公示与官方公告；'+
+      '结构与机制描述为公开信息的整理与改写。</li>'+
+      '<li><b>第三方来源仅作交叉核对</b>：社区 wiki 与攻略站的内容仅用于验证参数，'+
+      '表述均为自行撰写，不复制原文段落。</li>'+
+      '<li><b>不含破解与自动化</b>：未使用、也未提供任何绕过游戏机制、自动化操作或数据抓取的工具。</li>'+
+      '<li><b>权利归属</b>：《原神》及其全部内容的著作权与商标权属于米哈游（miHoYo / HoYoverse）。'+
+      '本项目与米哈游无任何关联，不代表官方立场。</li>'+
+      '<li><b>数值时效性</b>：游戏机制随版本更新调整，使用前请对照游戏内当前说明；'+
+      '标注「待核验」的条目尤其需要复核。</li>'+
+    '</ul>'+
+    '<div class="note warn"><b>关于估算数据</b>：页面中标注「社区测算」「估算」的原石产出、'+
+    '平均抽数等数值为非官方统计，仅用于量级参考，请勿作为消费决策依据。'+
+    '同时提醒：抽卡属于随机消费，请理性对待，量力而行。</div></div>';
+
+  h += '<div class="card"><h2>如何更新<span class="en">Maintenance</span></h2>'+
+    '<ul class="tight">'+
+      '<li><b>改数据</b>：编辑 <code>scripts/kb_data.py</code>，'+
+      '然后依次运行 <code>python scripts/init_db.py</code> 与 <code>python scripts/build_site.py</code>，'+
+      '页面会自动重建。</li>'+
+      '<li><b>换一套界面</b>：修改 <code>site/template.html</code>，'+
+      '运行 <code>build_site.py</code> 即可；模板开头的数据占位符会被替换成数据库内容（JSON）。</li>'+
+      '<li><b>版本更新后要核对</b>：深渊每期敌人与渊月祝福、新版本角色与武器、'+
+      '卡池概率与价格如有调整。</li>'+
+      '<li><b>建议核对渠道</b>：游戏内「祈愿-详情」（概率）、游戏内深渊界面（当期敌人与祝福）、'+
+      '官方公告（版本更新与价格）。</li>'+
+    '</ul></div>';
+
+  $("#tab-data").innerHTML = h;
+})();
+function kv(k,v){
+  return '<div style="background:#fafcfd;border:1px solid var(--line);border-radius:9px;padding:11px 14px">'+
+    '<div class="muted" style="font-size:11.5px">'+esc(k)+'</div>'+
+    '<div style="font-weight:600;margin-top:2px">'+v+'</div></div>';
+}
+
+/* ============================================================
+   全局搜索
+   ============================================================ */
+(function search(){
+  const M = Object.fromEntries(KB.meta.map(m=>[m.key,m.value]));
+  const chip=document.getElementById("chipVer");
+  if(chip) chip.textContent = "数据基准 · " + (M.baseline_version||"") + " · 核验 " + (M.accessed_at||"");
+
+  const q=$("#q"), sr=$("#sr");
+  function build(kw){
+    const k=kw.toLowerCase();
+    const g=[];
+    const tm=KB.teams.filter(t=>[t.name,t.summary,t.archetype,t.strengths,t.weaknesses].join(" ").toLowerCase().includes(k));
+    if(tm.length) g.push(["队伍 / 配队", tm.slice(0,6).map(t=>({t:t.name,s:t.archetype,go:"teams"}))]);
+    const ch=KB.characters.filter(c=>[c.name,c.element,c.weapon,c.roles,c.region].join(" ").toLowerCase().includes(k));
+    if(ch.length) g.push(["角色", ch.slice(0,6).map(c=>({t:c.name,s:c.element+" · "+c.weapon,go:"chars"}))]);
+    const op=KB.operations.filter(o=>[o.topic,o.content_side,o.monetization_side,o.linkage,o.analysis].join(" ").toLowerCase().includes(k));
+    if(op.length) g.push(["运营机制", op.slice(0,6).map(o=>({t:o.topic,s:"第 "+o.seq+" 条",go:"ops"}))]);
+    const am=KB.abyss_mechanics.filter(m=>[m.name,m.description,m.strategy].join(" ").toLowerCase().includes(k));
+    if(am.length) g.push(["深渊机制", am.slice(0,6).map(m=>({t:m.name,s:m.category,go:"abyss"}))]);
+    const rx=KB.reactions.filter(r=>[r.name,r.elements,r.note].join(" ").toLowerCase().includes(k));
+    if(rx.length) g.push(["元素反应", rx.slice(0,6).map(r=>({t:r.name,s:r.elements,go:"teams"}))]);
+    const ic=KB.incidents.filter(i=>[i.name,i.summary,i.trigger,i.official_response,i.root_cause].join(" ").toLowerCase().includes(k));
+    if(ic.length) g.push(["运营事故", ic.slice(0,6).map(i=>({t:i.name,s:i.version+" · "+i.category,go:"incident"}))]);
+    const ifl=(KB.incident_impacts||[]).filter(x=>[x.dimension,x.impact,x.mechanism].join(" ").toLowerCase().includes(k));
+    if(ifl.length) g.push(["长期影响", ifl.slice(0,6).map(x=>({t:x.impact,s:x.dimension+" · "+x.horizon,go:"incident"}))]);
+    const imt=(KB.inflation_metrics||[]).filter(x=>[x.category,x.metric,x.period,x.value_text].join(" ").toLowerCase().includes(k));
+    if(imt.length) g.push(["膨胀观测", imt.slice(0,6).map(x=>({t:x.metric,s:x.period+" · "+x.value_text,go:"incident"}))]);
+    const mSum={}; (KB.maf_summaries||[]).filter(s=>s.is_primary).forEach(s=>{ mSum[s.item_id]=s.summary; });
+    const mi=(KB.maf_items||[]).filter(x=>[x.title,x.date_label,x.kind,x.origin,mSum[x.id]||""].join(" ").toLowerCase().includes(k));
+    if(mi.length) g.push(["观察材料", mi.slice(0,6).map(x=>({t:x.title,s:x.date_label+" · "+x.origin,go:"materials"}))]);
+    const mr=(KB.maf_reports||[]).filter(x=>[x.origin,x.span,x.backend,x.model].join(" ").toLowerCase().includes(k));
+    if(mr.length) g.push(["观察报告", mr.slice(0,6).map(x=>({t:x.origin+" · "+x.source_db,s:x.items+" 条材料 · "+x.span,go:"materials"}))]);
+    return g;
+  }
+  function render(){
+    const kw=q.value.trim();
+    if(kw.length<1){ sr.style.display="none"; return; }
+    const g=build(kw);
+    if(!g.length){ sr.innerHTML='<div class="it muted">没有找到匹配内容</div>'; sr.style.display="block"; return; }
+    sr.innerHTML = g.map(([grp,items])=>
+      '<div class="grp">'+esc(grp)+'（'+items.length+'）</div>'+
+      items.map(i=>'<div class="it" data-go="'+i.go+'">'+esc(i.t)+'<small>'+esc(i.s)+'</small></div>').join("")
+    ).join("");
+    sr.style.display="block";
+    sr.querySelectorAll(".it").forEach(it=>{
+      it.onclick=()=>{ if(it.dataset.go){ go(it.dataset.go); } sr.style.display="none"; q.value=""; };
+    });
+  }
+  q.addEventListener("input",render);
+  q.addEventListener("focus",render);
+  document.addEventListener("click",e=>{
+    if(!e.target.closest(".searchbox")) sr.style.display="none";
+  });
+})();
+
+/* 默认打开第一个标签 */
+go("overview");
+</script>
+</body>
+</html>
