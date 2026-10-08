@@ -233,6 +233,22 @@ git push
 **注意**：`genshin_kb.db` 是二进制文件，每次重建都会整体换一份，git 存不下它的历史增量。
 如果它开始明显拖慢仓库，可以把它从版本控制里移出去，改为定期另存备份。
 
+### 远程私有仓库
+
+远程仓库规划叫 **`genshin-kb`**（私有）。建它需要 GitHub CLI 先登录 —— 这一步得你自己在终端做一次：
+
+```bash
+gh auth login          # 选 GitHub.com → HTTPS → 用浏览器授权
+```
+
+登录好之后，在仓库根目录跑这一条就会建库、加远程、把 `main` 推上去：
+
+```bash
+gh repo create genshin-kb --private --source . --remote origin --push
+```
+
+之后就是常规的 `git add -A && git commit -m "..." && git push`。
+
 ---
 
 ## 七、声明
