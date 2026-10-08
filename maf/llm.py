@@ -24,6 +24,7 @@ import os
 import socket
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,7 @@ __all__ = ["Backend", "build_cloud_backend", "build_local_backend",
            "probe_local", "find_local_service", "agent_options",
            "load_env_file", "DEFAULT_ENV_FILE", "DEFAULT_LOCAL_BASE_URL",
            "COMMON_LOCAL_PORTS", "LOCAL_START_HINT", "local_ready",
-           "_split_base"]
+           "default_concurrency", "clear_probe_cache", "_split_base"]
 
 # 本地模型由使用者自己在 WSL 里起 —— 应用和脚本都不启动 WSL，也不留常驻进程。
 # 这句话会在所有「连不上本地服务」的报错里原样出现，省得使用者去猜。
@@ -130,9 +131,33 @@ def _split_base(base_url: str) -> tuple[str, str]:
     return root, root + "/v1"
 
 
+# (base_url, token) → 探测结果。只在单次进程内有效，不落盘、不跨进程。
+_PROBE_CACHE: dict[tuple[str, str], dict] = {}
+
+
 def probe_local(base_url: str, token: str | None = None,
-                timeout: float = 3.0) -> dict:
-    """探测一个 OpenAI 兼容本地服务。返回 {health, ready, models, reachable, error}。"""
+                timeout: float = 3.0, *, fresh: bool = False) -> dict:
+    """探测一个 OpenAI 兼容本地服务。返回 {health, ready, models, reachable, error}。
+
+    结果按 (base_url, token) 记忆化：一次 `--summarizer local --condenser local`
+    的运行里，同一个地址以前要被探 4 次（构造两个后端各一次、两个角色各再确认一次）
+    = 12 个 HTTP 请求。这里缓存之后只剩 3 个。
+    服务中途起停的窗口极窄，同一次运行里不值得为它多打 9 个请求。
+    """
+    cache_key = ((base_url or "").rstrip("/"), token or "")
+    if not fresh and cache_key in _PROBE_CACHE:
+        return dict(_PROBE_CACHE[cache_key])
+    report = _probe_local_uncached(base_url, token, timeout)
+    _PROBE_CACHE[cache_key] = dict(report)
+    return report
+
+
+def clear_probe_cache() -> None:
+    """忘掉记过的探测结果（测试或服务重启后用）。"""
+    _PROBE_CACHE.clear()
+
+
+def _probe_local_uncached(base_url: str, token: str | None, timeout: float) -> dict:
     root, openai_base = _split_base(base_url)
     report: dict[str, Any] = {"base_url": base_url.rstrip("/"),
                               "openai_base": openai_base, "reachable": False,
@@ -154,7 +179,7 @@ def probe_local(base_url: str, token: str | None = None,
     return report
 
 
-def local_ready(backend, timeout: float = 2.0) -> tuple[bool, str]:
+def local_ready(backend, timeout: float = 2.0, *, fresh: bool = False) -> tuple[bool, str]:
     """本地服务现在在不在。返回 (可用, 说明)。
 
     云端后端、占位后端一律当成「可用」—— 这里只关心本地推理服务。
@@ -162,37 +187,78 @@ def local_ready(backend, timeout: float = 2.0) -> tuple[bool, str]:
     if backend is None or getattr(backend, "kind", "") != "chat_completions":
         return True, ""
     base = getattr(backend, "base_url", "") or DEFAULT_LOCAL_BASE_URL
-    report = probe_local(base, timeout=timeout)
+    report = probe_local(base, timeout=timeout, fresh=fresh)
     models = [m for m in (report.get("models") or []) if m]
     if report.get("reachable") or models:
         return True, "、".join(models)
     return False, str(report.get("error") or "探测不到本地服务")
 
 
+# 端口探测是纯 I/O 等待，串行扫是这条链上最离谱的一处：
+# 64512 个端口 × 0.35s 超时，端口被防火墙 DROP 时最坏 6 小时。
+_SCAN_WORKERS = 128
+_SCAN_CHUNK = 4096
+
+
 def find_local_service(*, token: str | None = None, host: str = "127.0.0.1",
                        ports: tuple[int, ...] = COMMON_LOCAL_PORTS,
                        scan_range: tuple[int, int] | None = None,
-                       timeout: float = 0.35) -> list[tuple[str, dict]]:
-    """扫回环上哪些端口在跑 OpenAI 兼容服务。默认只试常见端口。"""
+                       timeout: float = 0.35,
+                       workers: int = _SCAN_WORKERS,
+                       on_scan=None) -> list[tuple[str, dict]]:
+    """扫回环上哪些端口在跑 OpenAI 兼容服务。默认只试常见端口。
+
+    候选端口用有上限的线程池并发探测（分块提交，避免一次压 6 万个 future），
+    命中端口再逐个发 HTTP 确认。真实服务只有一两个，所以后面的 HTTP 部分不值得并发。
+    """
     candidates = list(ports)
     if scan_range:
         lo, hi = scan_range
-        candidates = [p for p in range(lo, hi + 1) if p not in candidates]
+        known = set(candidates)
+        candidates = [p for p in range(lo, hi + 1) if p not in known]
 
     def is_open(port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(timeout)
             return s.connect_ex((host, port)) == 0
 
+    open_ports: list[int] = []
+    total = len(candidates)
+    scanned = 0
+    if total:
+        pool = ThreadPoolExecutor(max_workers=max(1, min(workers, total)))
+        try:
+            for start in range(0, total, _SCAN_CHUNK):
+                chunk = candidates[start:start + _SCAN_CHUNK]
+                for port, ok in zip(chunk, pool.map(is_open, chunk)):
+                    if ok:
+                        open_ports.append(port)
+                scanned += len(chunk)
+                if on_scan is not None:
+                    on_scan(scanned, total, len(open_ports))
+        finally:
+            pool.shutdown(wait=True)
+
     found: list[tuple[str, dict]] = []
-    for port in candidates:
-        if not is_open(port):
-            continue
+    for port in open_ports:
         base = f"http://{host}:{port}"
         report = probe_local(base, token, timeout=1.5)
         if report["reachable"] or report["models"]:
             found.append((base, report))
     return found
+
+
+def default_concurrency(backend) -> int:
+    """并发开多大，取决于后端在哪跑。
+
+    云端 API：4~8 路是实打实的正收益，时间几乎都花在网络等待上。
+    本地单进程推理服务（llama.cpp / DesktopAI / ollama 单模型）：服务端本来就一条队列，
+    多开几路只是把请求排进同一队列 —— 总时长几乎不变，却要同时占住 N 份 KV cache。
+    手机上是直接 OOM 的。
+    """
+    if backend is not None and getattr(backend, "kind", "") == "chat_completions":
+        return max(1, int(os.getenv("MAF_LOCAL_CONCURRENCY", "1") or 1))
+    return max(1, int(os.getenv("MAF_CLOUD_CONCURRENCY", "4") or 4))
 
 
 def build_local_backend(base_url: str, token: str | None = None,

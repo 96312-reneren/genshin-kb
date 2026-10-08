@@ -428,16 +428,38 @@ class DateFiller:
     """
 
     def __init__(self, backend, *, concurrency: int = 4,
-                 doc_chars: int = 1200, max_tokens: int = 64) -> None:
+                 doc_chars: int = 1200, max_tokens: int = 64,
+                 lookup=None, on_result=None) -> None:
         self.backend = backend
         self.concurrency = max(1, int(concurrency))
         self.doc_chars = doc_chars
         self.max_tokens = max_tokens
+        # lookup(fp) -> 上次问出来的日期（"" 表示问过、结论就是「未知」）；
+        # 返回 None 表示这个指纹没见过。on_result(fp, date) 回报新结论供持久化。
+        self.lookup = lookup
+        self.on_result = on_result
+        self.hits = 0
+
+    @staticmethod
+    def fingerprint(item) -> str:
+        """标题 + 正文字段指纹。
+
+        不能用 uid 做键：uid 是 `_uid_for(date, ...)` 算的，而日期正是这里要推断的
+        东西 —— 用它当缓存键等于转圈。
+        """
+        raw = f"{item.title}\n{item.body or ''}"
+        return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
 
     def _agent(self):
         from news_workflow import _budget_for, _agent as make_agent
         budget = _budget_for(self.backend, self.max_tokens)
         return make_agent(self.backend, DATE_INSTRUCTIONS, budget), budget
+
+    @staticmethod
+    def _settle(item, date: str | None, date_source: str, note: str) -> None:
+        item.date = date or None
+        item.date_source = date_source
+        item.note = note
 
     async def _one(self, agent, item, budget: int) -> None:
         body = (item.body or "")[:self.doc_chars]
@@ -446,40 +468,84 @@ class DateFiller:
         resp = await agent.run(prompt, options=agent_options(self.backend, budget))
         raw = (getattr(resp, "text", "") or "").strip()
         date = normalize_date(raw)
-        item.date = date
-        item.date_source = "model" if date else "unknown"
-        item.note = "" if date else "正文里没有可确定的日期"
+        self._settle(item, date, "model" if date else "unknown",
+                     "" if date else "正文里没有可确定的日期")
 
     async def fill(self, items) -> dict:
-        """就地补日期，返回 {asked, resolved, unknown}。"""
+        """就地补日期，返回 {asked, resolved, unknown}。
+
+        「这次有多少种正文是复用已存结论的」记在 `self.hits` 上 —— 返回结构保持
+        原样，免得改动调用方的既有契约。
+        """
         import asyncio
         targets = [i for i in items if not i.date]
         if not targets:
             return {"asked": 0, "resolved": 0, "unknown": 0}
-        if self.backend is None or getattr(self.backend, "client", None) is None:
-            for it in targets:
-                it.date_source = "unknown"
-                it.note = "没有可用的模型，日期保持未知"
-            return {"asked": 0, "resolved": 0, "unknown": len(targets)}
+
+        # 同一种正文只问一次：指纹相同的条目共用一条结论，问完再抄给组里其余条目。
+        # 以前 30 条一模一样的材料要打 30 次模型，现在打 1 次。
+        groups: dict[str, list] = {}
+        for it in targets:
+            groups.setdefault(self.fingerprint(it), []).append(it)
+
+        todo: list[tuple[str, list]] = []
+        for fp, group in groups.items():
+            remembered = self.lookup(fp) if self.lookup else None
+            if remembered is None:
+                todo.append((fp, group))
+                continue
+            self.hits += 1
+            for it in group:
+                self._settle(it, remembered or None,
+                             "model" if remembered else "unknown",
+                             "" if remembered else "上次问过模型，结论是日期未知")
+
+        resolved_now = sum(1 for it in targets if it.date)
+        has_model = not (self.backend is None
+                         or getattr(self.backend, "client", None) is None)
+        # 缓存先于「有没有模型」判断：已经问过的问题，没模型也能答。
+        if not has_model:
+            for _fp, group in todo:
+                for it in group:
+                    self._settle(it, None, "unknown", "没有可用的模型，日期保持未知")
+            return {"asked": 0, "resolved": resolved_now,
+                    "unknown": len(targets) - resolved_now}
+
+        if not todo:
+            print(f"      · {len(targets)} 条缺日期，全部命中已存结论，没调模型",
+                  file=_stderr(), flush=True)
+            return {"asked": 0, "resolved": resolved_now,
+                    "unknown": len(targets) - resolved_now}
 
         agent, budget = self._agent()
         sem = asyncio.Semaphore(self.concurrency)
-        print(f"      · {len(targets)} 条缺日期，交 {self.backend.name} 逐条补抽",
+        print(f"      · {len(targets)} 条缺日期（{len(groups)} 种正文），"
+              f"交 {self.backend.name} 补抽其中 {len(todo)} 种",
               file=_stderr(), flush=True)
 
-        async def run(it):
+        async def run(fp, group):
+            head = group[0]
+            ok = False
             async with sem:
                 try:
-                    await self._one(agent, it, budget)
+                    await self._one(agent, head, budget)
+                    ok = True
                 except Exception as exc:            # 单条失败不该毁掉整批
-                    it.date_source = "unknown"
-                    it.note = f"补抽失败：{type(exc).__name__}"
+                    self._settle(head, None, "unknown",
+                                 f"补抽失败：{type(exc).__name__}")
+            # 只有真拿到结论才写回缓存；超时/连不上不能当成「日期未知」存下来
+            if ok and self.on_result:
+                self.on_result(fp, head.date or "")
+            for it in group[1:]:
+                self._settle(it, head.date, head.date_source, head.note)
 
-        await asyncio.gather(*(run(it) for it in targets))
+        await asyncio.gather(*(run(fp, group) for fp, group in todo))
         resolved = sum(1 for it in targets if it.date)
+        tail = f"（{self.hits} 种正文用了已存结论）" if self.hits else ""
         print(f"      · 补抽完成：认得 {resolved} 条，仍有 "
-              f"{len(targets) - resolved} 条日期未知", file=_stderr(), flush=True)
-        return {"asked": len(targets), "resolved": resolved,
+              f"{len(targets) - resolved} 条日期未知{tail}",
+              file=_stderr(), flush=True)
+        return {"asked": len(todo), "resolved": resolved,
                 "unknown": len(targets) - resolved}
 
 

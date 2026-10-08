@@ -35,6 +35,11 @@ from content import UNKNOWN_TS
 
 __all__ = ["Store"]
 
+# 库结构版本。改了 SCHEMA 或 _migrate() 就加一，老库下次打开会自动升级。
+# 放在 PRAGMA user_version 里，好处是不用额外建一张「版本表」，
+# 也让每次 open 都能跳过已经建好的那 24 条 DDL。
+SCHEMA_VERSION = 3
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS crawl_runs (
     run_id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,15 +78,21 @@ CREATE TABLE IF NOT EXISTS links (
     PRIMARY KEY (from_url, to_url)
 );
 
+-- summaries 既是「这次的产出」，也是「下次的缓存」。
+-- 缓存键 = (url, backend, model, prompt_ver)：同一页、同一后端、同一版提示词，
+-- 只留一行。content_hash 用来判断页面正文有没有变过 —— 变了就不该复用旧摘要。
+-- 唯一索引不写在这里，因为老库里可能已经有重复行；见 _migrate()。
 CREATE TABLE IF NOT EXISTS summaries (
-    summary_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id     INTEGER REFERENCES crawl_runs(run_id),
-    url        TEXT,
-    ordinal    INTEGER,
-    backend    TEXT,
-    model      TEXT,
-    summary    TEXT,
-    created_at TEXT
+    summary_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       INTEGER REFERENCES crawl_runs(run_id),
+    url          TEXT,
+    ordinal      INTEGER,
+    backend      TEXT,
+    model        TEXT,
+    summary      TEXT,
+    created_at   TEXT,
+    content_hash TEXT NOT NULL DEFAULT '',
+    prompt_ver   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS digests (
@@ -143,15 +154,19 @@ CREATE TABLE IF NOT EXISTS news_items (
 CREATE INDEX IF NOT EXISTS idx_news_created ON news_items(created_at, post_id);
 CREATE INDEX IF NOT EXISTS idx_news_kind    ON news_items(kind, created_at);
 
+-- 同 summaries：既存本轮结果，也当下一轮的缓存。键 = (uid, backend, model, prompt_ver)。
+-- 之前这张表只写不读，所以每跑一次「观察报告」就把 N 条内容原样再喂一遍模型。
 CREATE TABLE IF NOT EXISTS news_summaries (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    news_run_id INTEGER,
-    uid        TEXT,
-    ordinal    INTEGER,
-    backend    TEXT,
-    model      TEXT,
-    summary    TEXT,
-    created_at TEXT
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    news_run_id  INTEGER,
+    uid          TEXT,
+    ordinal      INTEGER,
+    backend      TEXT,
+    model        TEXT,
+    summary      TEXT,
+    created_at   TEXT,
+    content_hash TEXT NOT NULL DEFAULT '',
+    prompt_ver   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS news_reports (
@@ -165,11 +180,46 @@ CREATE TABLE IF NOT EXISTS news_reports (
     report     TEXT,
     created_at TEXT
 );
+
+-- 「这条材料的日期是哪天」的结论缓存。键是标题+正文字段指纹，不是 uid ——
+-- uid 里带着日期，而日期正是要推断的东西。date 为空串表示问过模型、结论是「未知」。
+-- 日期前缀能认出来的条目根本不走这里，所以这张表只装模型真正答过的那些。
+CREATE TABLE IF NOT EXISTS date_inferences (
+    fingerprint TEXT PRIMARY KEY,
+    date        TEXT NOT NULL DEFAULT '',
+    model       TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL DEFAULT ''
+);
 """
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    return any(r["name"] == column for r in conn.execute(f"PRAGMA table_info({table})"))
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """老库升级：补列 → 去重 → 建唯一索引。
+
+    三步顺序不能换：唯一索引在有重复行的库上会直接建失败，
+    所以必须先按新的缓存键把重复行清成一行。
+    """
+    for table, key_cols in (("summaries", ("url", "backend", "model", "prompt_ver")),
+                            ("news_summaries", ("uid", "backend", "model", "prompt_ver"))):
+        for col in ("content_hash", "prompt_ver"):
+            if not _has_column(conn, table, col):
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {col} TEXT NOT NULL DEFAULT ''")
+        # 老库里同一缓存键会有多行（每跑一次追加一行）。只保留最新那条。
+        cols = ", ".join(key_cols)
+        conn.execute(f"DELETE FROM {table} WHERE rowid NOT IN "
+                     f"(SELECT MAX(rowid) FROM {table} GROUP BY {cols})")
+        idx = ("idx_summaries_cache" if table == "summaries"
+               else "idx_news_summaries_cache")
+        conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {idx} ON {table}({cols})")
 
 
 class Store:
@@ -183,7 +233,11 @@ class Store:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
-        self.conn.executescript(SCHEMA)
+        # 已经建过表的库不再重跑 DDL，也不再跑一次去重扫描。
+        if self.conn.execute("PRAGMA user_version").fetchone()[0] != SCHEMA_VERSION:
+            self.conn.executescript(SCHEMA)
+            _migrate(self.conn)
+            self.conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         self.conn.commit()
 
     # ── 生命周期 ────────────────────────────────────────────
@@ -192,6 +246,12 @@ class Store:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+    PAGE_COLUMNS = ("url,run_id,host,depth,status,content_type,title,text_len,"
+                    "content_hash,robots_allowed,fetched_at,error,note")
+    NEWS_COLUMNS = ("uid,news_run_id,game,kind,post_id,title,url,created_at,"
+                    "created_iso,source_api,source_name,content_hash,fetched_at,"
+                    "first_seen_at,updated_at")
 
     def close(self) -> None:
         try:
@@ -259,16 +319,19 @@ class Store:
         return count
 
     def upsert_links(self, from_url: str, to_urls: Iterable[str]) -> None:
-        self.conn.executemany(
-            "INSERT OR IGNORE INTO links (from_url, to_url) VALUES (?,?)",
-            [(from_url, t) for t in to_urls],
-        )
+        # 单事务提交：每条链接单独 commit 在 /sdcard 上就是每行一次 fsync。
+        with self.conn:
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO links (from_url, to_url) VALUES (?,?)",
+                [(from_url, t) for t in to_urls],
+            )
 
     # ── 查询 ────────────────────────────────────────────────
     def iter_pages(self, *, run_id: int | None = None, only_ok: bool = True,
                    min_text_len: int = 1,
-                   order: str = "depth, url") -> Iterator[sqlite3.Row]:
-        sql = "SELECT * FROM pages WHERE text_len >= ?"
+                   order: str = "depth, url",
+                   columns: str = "*") -> Iterator[sqlite3.Row]:
+        sql = f"SELECT {columns} FROM pages WHERE text_len >= ?"
         args: list[Any] = [min_text_len]
         if run_id is not None:
             sql += " AND run_id = ?"
@@ -291,13 +354,68 @@ class Store:
         return {k: int(v or 0) for k, v in dict(row).items()}
 
     # ── 结果落库 ────────────────────────────────────────────
-    def save_summaries(self, rows: list[dict], run_id: int | None = None) -> None:
+    def save_summaries(self, rows: list[dict], run_id: int | None = None,
+                       *, prompt_ver: str = "") -> int:
+        """按缓存键 (url, backend, model, prompt_ver) 覆盖写入。
+
+        以前这里是裸 INSERT：重跑一次 digest 就在 summaries 里多叠一层，
+        手机上的库就是这么变成「14 页 28 条摘要」的。现在同一把钥匙只有一行，
+        重跑既不会长胖，也不会把上面那层旧摘要当成另一个版本留着。
+        """
+        params = self._summary_rows(rows, run_id, prompt_ver)
+        if not params:
+            return 0
+        keys = [(r["url"], r["backend"], r["model"], r["prompt_ver"]) for r in params]
         with self.conn:
             self.conn.executemany(
-                """INSERT INTO summaries (run_id,url,ordinal,backend,model,summary,created_at)
-                   VALUES (:run_id,:url,:ordinal,:backend,:model,:summary,:created_at)""",
-                [{"run_id": run_id, "created_at": _now(), **row} for row in rows],
-            )
+                "DELETE FROM summaries WHERE url=? AND backend=? AND model=? AND prompt_ver=?",
+                keys)
+            self.conn.executemany(
+                """INSERT INTO summaries
+                   (run_id,url,ordinal,backend,model,summary,created_at,content_hash,prompt_ver)
+                   VALUES (:run_id,:url,:ordinal,:backend,:model,:summary,:created_at,
+                           :content_hash,:prompt_ver)""",
+                params)
+        return len(params)
+
+    @staticmethod
+    def _summary_rows(rows: list[dict], run_id: int | None, prompt_ver: str,
+                      *, key: str = "url", run_field: str = "run_id") -> list[dict]:
+        """归一化成非空字符串 + 同键去重（后一条覆盖前一条）。"""
+        now = _now()
+        out: list[dict] = []
+        seen: dict[tuple, int] = {}
+        for row in rows:
+            item = {
+                run_field: run_id,
+                key: row.get(key) or "",
+                "ordinal": row.get("ordinal"),
+                "backend": row.get("backend") or "",
+                "model": row.get("model") or "",
+                "summary": row.get("summary") or "",
+                "created_at": now,
+                "content_hash": row.get("content_hash") or "",
+                "prompt_ver": row.get("prompt_ver", prompt_ver) or "",
+            }
+            ident = (item[key], item["backend"], item["model"], item["prompt_ver"])
+            if ident in seen:
+                out[seen[ident]] = item
+                continue
+            seen[ident] = len(out)
+            out.append(item)
+        return out
+
+    def load_summary_cache(self, backend: str, model: str,
+                           prompt_ver: str = "") -> dict[str, tuple[str, str]]:
+        """读回已算好的逐页摘要：url -> (content_hash, summary)。
+
+        调用方拿 pages.content_hash 一比就知道这份摘要还算不算数：
+        正文没变就直接复用，不用再喂一次模型。这是整条链上最省时间的一步。
+        """
+        rows = self.conn.execute(
+            "SELECT url, content_hash, summary FROM summaries"
+            " WHERE backend=? AND model=? AND prompt_ver=?", (backend, model, prompt_ver))
+        return {r["url"]: (r["content_hash"] or "", r["summary"] or "") for r in rows}
 
     def save_digest(self, *, text: str, threshold: int, condensed: bool,
                     backend: str, model: str, segments: int,
@@ -394,13 +512,16 @@ class Store:
     def iter_news(self, *, game: str | None = None, kind: str | None = None,
                   kinds: Iterable[str] | None = None,
                   since: int | None = None, until: int | None = None,
-                  limit: int = 0) -> Iterator[sqlite3.Row]:
+                  limit: int = 0, columns: str = "*") -> Iterator[sqlite3.Row]:
         """按发布时间升序返回 —— 顺序存储的读取端，默认就是有序的。
 
         kind 传单个类别，kinds 传一组；两个都不给就是全部类别混排。
         混排依然是一条时间轴，类别只作为每个节点的标签。
+
+        columns 用来把 description（全长正文）挡在查询之外：只数条数、只排时间轴的
+        调用方没必要把几 MB 正文拉进内存。
         """
-        sql = "SELECT * FROM news_items WHERE 1=1"
+        sql = f"SELECT {columns} FROM news_items WHERE 1=1"
         args: list[Any] = []
         if game:
             sql += " AND game = ?"
@@ -457,13 +578,63 @@ class Store:
         return {r["kind"]: int(r["c"]) for r in rows}
 
     def save_news_summaries(self, rows: list[dict],
-                            news_run_id: int | None = None) -> None:
+                            news_run_id: int | None = None,
+                            *, prompt_ver: str = "") -> int:
+        """按缓存键 (uid, backend, model, prompt_ver) 覆盖写入，重跑不再堆重复行。"""
+        params = self._summary_rows(rows, news_run_id, prompt_ver,
+                                    key="uid", run_field="news_run_id")
+        if not params:
+            return 0
+        keys = [(r["uid"], r["backend"], r["model"], r["prompt_ver"]) for r in params]
         with self.conn:
             self.conn.executemany(
+                "DELETE FROM news_summaries WHERE uid=? AND backend=? AND model=? AND prompt_ver=?",
+                keys)
+            self.conn.executemany(
                 """INSERT INTO news_summaries
-                   (news_run_id,uid,ordinal,backend,model,summary,created_at)
-                   VALUES (:news_run_id,:uid,:ordinal,:backend,:model,:summary,:created_at)""",
-                [{"news_run_id": news_run_id, "created_at": _now(), **r} for r in rows])
+                   (news_run_id,uid,ordinal,backend,model,summary,created_at,
+                    content_hash,prompt_ver)
+                   VALUES (:news_run_id,:uid,:ordinal,:backend,:model,:summary,:created_at,
+                           :content_hash,:prompt_ver)""",
+                params)
+        return len(params)
+
+    def load_news_summary_cache(self, backend: str, model: str,
+                                prompt_ver: str = "") -> dict[str, tuple[str, str]]:
+        """读回已算好的逐条摘要：uid -> (content_hash, summary)。
+
+        喂给报告的那一步以前只写不读，所以每次重跑都把 N 条内容原样再问一遍模型。
+        """
+        rows = self.conn.execute(
+            "SELECT uid, content_hash, summary FROM news_summaries"
+            " WHERE backend=? AND model=? AND prompt_ver=?", (backend, model, prompt_ver))
+        return {r["uid"]: (r["content_hash"] or "", r["summary"] or "") for r in rows}
+
+    def load_date_cache(self) -> dict[str, str]:
+        """读回「日期推断」的结论：正文指纹 -> 日期（空串 = 上次结论是「未知」）。
+
+        没有这层缓存时，每条没写日期的材料每跑一次 ingest 都要重新问模型一遍日期 ——
+        同一批材料反复投喂就是同一笔钱反复付。
+        """
+        rows = self.conn.execute("SELECT fingerprint, date FROM date_inferences")
+        return {r["fingerprint"]: (r["date"] or "") for r in rows}
+
+    def save_date_inferences(self, rows: list[dict], model: str = "") -> int:
+        """落盘日期推断结论。键是指纹，所以同一条材料只会有一行。"""
+        now = _now()
+        payload = [(str(r.get("fingerprint") or ""), str(r.get("date") or ""),
+                    str(model or ""), now) for r in rows]
+        payload = [p for p in payload if p[0]]
+        if not payload:
+            return 0
+        with self.conn:
+            self.conn.executemany(
+                """INSERT INTO date_inferences(fingerprint,date,model,created_at)
+                   VALUES (?,?,?,?)
+                   ON CONFLICT(fingerprint) DO UPDATE SET
+                     date=excluded.date, model=excluded.model,
+                     created_at=excluded.created_at""", payload)
+        return len(payload)
 
     def save_news_report(self, *, backend: str, model: str, items: int, span: str,
                          source_api: str, timeline: str, report: str) -> int:
@@ -482,21 +653,25 @@ class Store:
     # ── 导出 ────────────────────────────────────────────────
     def export_json(self, path: str | Path, *, run_id: int | None = None,
                     include_text: bool = True) -> Path:
-        """导出成 JSON —— 这是给工作流的输入快照，也是人对得上账的中间产物。"""
+        """导出成 JSON —— 这是给工作流的输入快照，也是人对得上账的中间产物。
+
+        不这么写的话，几千页的正文会先在内存里拼成一个完整 dict 列表，
+        再整块序列化成一个字符串 —— 峰值约是正文总量的两倍。
+        这里改成一行一页流式落盘，峰值只剩一页。
+        """
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        pages = []
-        for row in self.iter_pages(run_id=run_id):
-            item = {k: row[k] for k in row.keys()}
-            item["robots_allowed"] = bool(item["robots_allowed"])
-            if not include_text:
-                item.pop("text", None)
-            pages.append(item)
-        payload = {
-            "exported_at": _now(),
-            "run_id": run_id,
-            "stats": self.stats(run_id),
-            "pages": pages,
-        }
-        out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        cols = (f"text,{self.PAGE_COLUMNS}" if include_text else self.PAGE_COLUMNS)
+        with out.open("w", encoding="utf-8") as fp:
+            fp.write("{\n")
+            fp.write(f'  "exported_at": {json.dumps(_now(), ensure_ascii=False)},\n')
+            fp.write(f'  "run_id": {json.dumps(run_id)},\n')
+            fp.write(f'  "stats": {json.dumps(self.stats(run_id), ensure_ascii=False)},\n')
+            fp.write('  "pages": [')
+            for i, row in enumerate(self.iter_pages(run_id=run_id, columns=cols)):
+                item = {k: row[k] for k in row.keys()}
+                item["robots_allowed"] = bool(item["robots_allowed"])
+                fp.write((",\n    " if i else "\n    ")
+                         + json.dumps(item, ensure_ascii=False))
+            fp.write("\n  ]\n}\n")
         return out

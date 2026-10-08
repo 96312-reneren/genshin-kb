@@ -130,6 +130,30 @@ node scripts/smoke_test.js
   而测试会往 stderr 写日志，于是脚本会抛 `NativeCommandError`，看起来像失败。**直接跑 unittest 才拿得到干净的退出码。**
 - Windows venv 可以随目录整体移动，`pyvenv.cfg` 里的旧路径只是装饰。
 
+### 性能：重跑不再从头付费（2026-10 做过一轮优化）
+
+同一份材料重跑一次，不该再问一遍模型。落地成四张缓存 + 几处写入优化：
+
+| 缓存 | 键 | 落在哪 |
+|---|---|---|
+| 逐页 / 逐条摘要 | `(url 或 uid, backend, model, prompt_ver)` | `summaries` / `news_summaries` 的 UNIQUE 索引 |
+| 日期推断 | `fingerprint = 标题 + 正文` | `date_inferences` 表（`fingerprint TEXT PRIMARY KEY`） |
+| 本地服务探测 | `(base_url, token)` | 进程内 `lru_cache` |
+| 并发路数 | 按后端类型 | 云端 4 路、本地 1 路（单进程 llama-server 上 4 路只是排队） |
+
+⚠️ **改了提示词就必须同时改 `PROMPT_VERSION` / `NEWS_PROMPT_VERSION`**，否则旧概括会被当成
+新提示词的答案直接复用。同理，缓存按 `backend + model` 隔离，换模型不会串味。
+
+⚠️ **缓存表要靠 UNIQUE 索引兜底去重，不能靠调用方自觉** —— `save_summaries` 现在是
+`INSERT ... ON CONFLICT(...) DO UPDATE`，重跑覆盖而不是堆行。历史上这里没有约束，
+手机上一次 14 页的 digest 跑两遍就存成了 28 条摘要。
+
+其它写入优化：`pages.json` 只在 `crawl` 时导出一次（`digest` 复用并检查 `st_mtime`）、
+`export_json` 改流式写盘不再全量物化、`write_if_changed` 内容没变就不重写文件、
+`upsert_links` 补了事务、`probe-local --scan` 改 128 路并发并按块打印进度、
+`asyncio.gather(return_exceptions=True)` 不让一条失败毁掉整批已付费的结果。
+`--deck-plain` 可以在没有 python-pptx 时只出大纲。
+
 ### 桥接脚本的合规取舍（重要）
 
 `maf_items.body` **只对人工投喂线保留正文**。第三方镜像线一律留空，理由写在同一行的 `body_policy` 字段。
@@ -216,14 +240,25 @@ node scripts/smoke_test.js
     --virtual-time-budget=6000 --dump-dom "http://127.0.0.1:8791/index.html"
   ```
   （所有标签页的 `innerHTML` 都会被填好，只有可见性靠 CSS 控制，所以 dump 出来的 DOM 能完整检查。）
-- `gh` 已装但**当前未登录**（`gh auth login` 需要用户自己在终端完成）。
+- `gh` 已装并已登录（账号 `96312-reneren`，协议 HTTPS）。远程私有仓库就是
+  `origin` → `https://github.com/96312-reneren/genshin-kb`（分支 `main`）。
+- **手机端（REDMI Turbo 4 Pro）**：那套工作流原型跑在 `com.dsh.client`（DSHA）的 proot 里，
+  手机上的位置是 `/sdcard/Download/crawl-maf-pipeline`；`adb` 在
+  `E:\AndroidSDK\platform-tools\adb.exe`，设备序列号 `22cfb982`。手机上的短板是
+  **Pillow / python-docx / python-pptx 与中文字体**，`maf/render_office.py` 的 `FONT_FILES`
+  已经排了 Linux → Android 的候选并支持 `MAF_FONT` 覆盖。
+- **不要在 PC 上代跑手机端测试**：Termux（`run-as com.termux`）里没有 Python，
+  DSHA 的包不是 debuggable、`/data/data` 进不去，无 root —— 真机验证只能由作者在 DSHA 的
+  proot 里手工执行 `bash run_tests.sh`。推送方式：`adb push` 到 `…/crawl-maf-pipeline.new`
+  再改名就位，旧目录改名成 `crawl-maf-pipeline.bak-<日期>` 留作回滚（改名是原子的，别原地覆盖）。
 
 ---
 
 ## 9. 当前状态与待办
 
 **已完成**：19 张手写表 + 5 张 maf 导入表；9 个标签页；专题报告 md/docx；
-maf 迁移（49 个文件哈希校验一致、112 项测试通过）；`import_maf.py` 桥接（幂等）。
+maf 迁移（文件哈希校验一致）；`import_maf.py` 桥接（幂等）；
+`maf/` 性能优化一轮（86 项测试通过）并已推送手机。
 
 **版本管理**：这个目录已经是一个 git 仓库（分支 `main`，首次提交把数据库与产物一起入库当备份）。
 `.gitignore` 只排除可重建的环境（`maf/myvenv/`、`__pycache__/`）与运行时副产物（`*.db-wal`）。
@@ -232,8 +267,11 @@ maf 迁移（49 个文件哈希校验一致、112 项测试通过）；`import_m
 
 **已知待办**：
 
-- GitHub 远程仓库尚未建立。`gh` 已安装但未登录，需要作者自己在终端跑一次 `gh auth login`，
-  之后才能 `gh repo create <名字> --private --source . --remote origin --push`。
+- ~~建 GitHub 远程仓库~~ 已完成（`origin` = `https://github.com/96312-reneren/genshin-kb`，私有）。
+- **手机端那套原型已按 PC 版 `maf/` 重做性能优化并推送过去**（`/sdcard/Download/crawl-maf-pipeline`，
+  35 个文件；旧版留在 `…/crawl-maf-pipeline.bak-20261002` 可回滚）。**但真机上那 86 项测试还没跑过** ——
+  adb 进不去 DSHA 的 proot，需要作者在手机里手工执行
+  `cd /sdcard/Download/crawl-maf-pipeline && bash run_tests.sh`。
 - `maf/data/crawl.db` 的 43 条条目来自**历史第三方接口镜像**，其上游正文按合规取舍没有入库。
   如果将来要用它们，优先考虑回到官方公告取一手内容，而不是重新打开镜像接口。
 - 知识库 `characters` 表最远到 5.3 附近的纳塔角色；7.x 的新角色（如材料里提到的菲林斯、伊涅芙、

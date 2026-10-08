@@ -35,6 +35,10 @@ DEFAULT_DOC_CHARS = 4000
 # 本地小模型不需要也不该给 8192 的预算，容易开始絮叨
 LOCAL_MAX_TOKENS = 256
 
+# 摘要口径版本。动了 PAGE_INSTRUCTIONS / DIGEST_INSTRUCTIONS 或 _one() 里的提示词，
+# 就必须把它加一 —— 否则老摘要会被当成「同一版提示词算出来的」继续复用。
+PROMPT_VERSION = "v1"
+
 
 def _budget(backend: Backend, configured: int) -> int:
     """按后端类型收窄 token 预算。"""
@@ -50,6 +54,9 @@ class Doc:
     url: str
     title: str = ""
     text: str = ""
+    # 正文指纹。有它才能判断「库里的旧摘要还算不算数」——
+    # 页面内容变过就得重算，没变过就该直接复用。
+    content_hash: str = ""
 
 
 @dataclass
@@ -135,13 +142,19 @@ DIGEST_INSTRUCTIONS = (
 
 # ─────────────────────────── 执行器 ───────────────────────────
 class PageSummarizer(Executor):
-    """输入 DocBatch → 输出 PageSummaries（并发逐页摘要）"""
+    """输入 DocBatch → 输出 PageSummaries（并发逐页摘要）
+
+    lookup / on_summary 是「摘要缓存」的接缝：工作流不认识数据库，
+    由调用方决定哪一页已经算过了。命中就直接用，不再开一次模型调用 ——
+    在这一层省下来的时间等于「本页本地推理耗时 × 命中页数」。
+    """
 
     def __init__(self, backend: Backend, *, id: str = "page_summarizer",
                  concurrency: int = DEFAULT_CONCURRENCY,
                  max_tokens: int = DEFAULT_MAX_TOKENS,
                  doc_chars: int = DEFAULT_DOC_CHARS,
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False,
+                 lookup=None, on_summary=None) -> None:
         super().__init__(id=id)
         self.backend = backend
         self._limit = concurrency
@@ -149,8 +162,19 @@ class PageSummarizer(Executor):
         self._max_tokens = max_tokens
         self._doc_chars = doc_chars
         self._dry_run = dry_run
+        self._lookup = lookup
+        self._on_summary = on_summary
+        self.hits = 0
 
     async def _one(self, idx: int, total: int, doc: Doc) -> str:
+        # 先在信号量外面查缓存：命中根本不需要占并发额度，也就不会被排队拖慢。
+        if self._lookup is not None:
+            cached = self._lookup(doc)
+            if cached:
+                self.hits += 1
+                print(f"      · 第 {idx}/{total} 页命中已存摘要（省一次模型调用）",
+                      file=sys.stderr, flush=True)
+                return cached
         async with self._sem:
             body = doc.text[: self._doc_chars]
             # 提示词必须给明确边界：小模型看到「第 N/M 页」这种脚手架会当成正文往下续写
@@ -166,9 +190,12 @@ class PageSummarizer(Executor):
                 return f"[dry-run] {doc.title or doc.url} 的摘要占位"
             text = await _run_text(_make_agent(self.backend, PAGE_INSTRUCTIONS, budget),
                                    prompt, self.backend, max_tokens=budget)
+            text = text or "（该页摘要为空）"
+            if self._on_summary is not None:
+                self._on_summary(doc, text)
             print(f"      · 第 {idx}/{total} 页摘要完成（{len(text)} 字）",
                   file=sys.stderr, flush=True)
-            return text or "（该页摘要为空）"
+            return text
 
     @handler
     async def summarize(self, batch: DocBatch,
@@ -182,7 +209,13 @@ class PageSummarizer(Executor):
         summaries = list(await asyncio.gather(
             *(self._one(i, total, d) for i, d in enumerate(batch.docs, 1))
         ))
-        print(f"      摘要阶段用时 {time.monotonic() - t0:.1f}s", file=sys.stderr, flush=True)
+        spent = time.monotonic() - t0
+        if self.hits:
+            print(f"      摘要阶段用时 {spent:.1f}s"
+                  f"（{self.hits}/{total} 页复用已存摘要，未调用模型）",
+                  file=sys.stderr, flush=True)
+        else:
+            print(f"      摘要阶段用时 {spent:.1f}s", file=sys.stderr, flush=True)
         await ctx.send_message(PageSummaries(docs=batch.docs, summaries=summaries,
                                              backend=self.backend.name,
                                              model=self.backend.model))
@@ -278,10 +311,12 @@ def build_workflow(summarizer: Backend, condenser: Backend, *,
                    concurrency: int = DEFAULT_CONCURRENCY,
                    max_tokens: int = DEFAULT_MAX_TOKENS,
                    doc_chars: int = DEFAULT_DOC_CHARS,
-                   dry_run: bool = False):
+                   dry_run: bool = False,
+                   lookup=None, on_summary=None):
     page_summarizer = PageSummarizer(summarizer, id="page_summarizer",
                                      concurrency=concurrency, max_tokens=max_tokens,
-                                     doc_chars=doc_chars, dry_run=dry_run)
+                                     doc_chars=doc_chars, dry_run=dry_run,
+                                     lookup=lookup, on_summary=on_summary)
     condense = Condenser(condenser, id="condenser", threshold=threshold,
                          max_tokens=max_tokens, dry_run=dry_run)
     emitter = PlainEmitter(id="emitter", threshold=threshold)

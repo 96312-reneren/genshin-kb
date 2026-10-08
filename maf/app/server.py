@@ -255,9 +255,11 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
 
     from content import DEFAULT_KIND, DEFAULT_SUBJECT, KIND_LABEL, KIND_ORDER, SOURCE_NAME
     from ingest import MODE_LABEL, DateFiller, parse_sources, to_docs
-    from news_workflow import run_news_digest
-    from pipeline import build_backend_for
+    from llm import LOCAL_START_HINT, default_concurrency, local_ready
+    from news_workflow import NEWS_PROMPT_VERSION, run_news_digest
+    from pipeline import build_backend_for, write_if_changed
     from store import Store
+    from workflow import PROMPT_VERSION
 
     sources = build_sources(payload)
     if not sources:
@@ -271,9 +273,11 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
     office = bool(payload.get("office", True))
     out_dir = Path(payload.get("out_dir") or state.out_dir).expanduser()
     try:
-        concurrency = max(1, min(8, int(payload.get("concurrency") or 4)))
+        # 0 表示「按后端自动」：云端 4 路是实打实的加速，手机上的单进程 llama-server
+        # 根本没有四条流水线可压，四路只是排队，还多占四份 KV 缓存。
+        concurrency = max(0, min(8, int(payload.get("concurrency") or 0)))
     except (TypeError, ValueError):
-        concurrency = 4
+        concurrency = 0
 
     if payload.get("fresh"):
         job.say(f"按设置清空旧库：{state.db}")
@@ -327,7 +331,6 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
     if not dry_run:
         # 本地模型是使用者自己在 WSL 里起的：这里只探测，探不到就把「怎么手动起来」
         # 原样告诉他，而不是让他在一堆连接错误里猜。
-        from llm import LOCAL_START_HINT, local_ready
         for role, backend in (("逐条概括", summarizer), ("报告与文案", condenser)):
             ready, detail = local_ready(backend)
             if not ready:
@@ -336,13 +339,36 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
         if getattr(summarizer, "kind", "") == "chat_completions":
             job.say(f"      本地服务在线：{summarizer.base_url}")
 
+    if not concurrency:
+        concurrency = default_concurrency(summarizer)
+    job.say(f"      并发 {concurrency}")
+
     missing = [it for it in result.items if not it.date]
     if missing and fill:
         job.say(f"[2/4] {len(missing)} 条没写日期，交给 {summarizer} 从正文补抽…")
         try:
-            info = asyncio.run(DateFiller(summarizer, concurrency=concurrency)
-                               .fill(result.items))
-            job.say(f"      补到 {info['resolved']} 条，仍未知 {info['unknown']} 条")
+            # 日期推断按「标题+正文」指纹缓存：同一段材料再投喂一次，结论直接抄，
+            # 不再重新问模型。这条线以前只写不读，重复投喂就是重复付费。
+            with Store(state.db) as cache_store:
+                known = ({} if payload.get("refresh")
+                         else cache_store.load_date_cache())
+                inferred: dict[str, str] = {}
+
+                def remember_date(fp: str, date: str) -> None:
+                    inferred[fp] = date
+
+                filler = DateFiller(summarizer, concurrency=concurrency,
+                                    lookup=known.get,
+                                    on_result=remember_date)
+                info = asyncio.run(filler.fill(result.items))
+                if inferred:
+                    cache_store.save_date_inferences(
+                        [{"fingerprint": k, "date": v}
+                         for k, v in inferred.items()],
+                        model=f"{summarizer.name}:{summarizer.model}")
+            job.say(f"      补到 {info['resolved']} 条，仍未知 {info['unknown']} 条"
+                    + (f"（{filler.hits} 种正文用了已存结论）"
+                       if filler.hits else ""))
         except Exception as exc:                                   # noqa: BLE001
             job.say(f"      补日期失败，按「日期未知」继续：{exc}")
     elif missing:
@@ -360,7 +386,14 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
                               note=f"app/{result.mode_used}")
         stats = store.news_stats()
         by_kind = store.news_kind_counts()
-        rows = list(store.iter_news(kinds=list(KIND_ORDER)))
+        # 只数条数、不用正文，就别把 description 拉进内存
+        rows = list(store.iter_news(kinds=list(KIND_ORDER),
+                                    columns=Store.NEWS_COLUMNS))
+        # 已存概括当缓存：正文没变过的条目直接复用，别再问一遍模型
+        cached = ({} if payload.get("refresh")
+                  else store.load_news_summary_cache(summarizer.name,
+                                                     summarizer.model,
+                                                     NEWS_PROMPT_VERSION))
     kinds_text = "、".join(f"{KIND_LABEL.get(k, k)} {v}" for k, v in by_kind.items())
     job.say(f"      入库（按发布时间升序）：新增 {counts['inserted']}，"
             f"更新 {counts['updated']}；库内共 {stats['总数']} 条（{kinds_text}）")
@@ -369,15 +402,36 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
 
     job.say(f"[3/4] 跑工作流：逐条概括 {len(rows)} 条"
             + ("，写报告，再规划幻灯片要点" if office else "，再写报告") + " …")
+
+    def lookup(doc) -> str | None:
+        hit = cached.get(doc.uid)
+        if not hit:
+            return None
+        old_hash, summary = hit
+        if old_hash and old_hash != doc.fingerprint:
+            return None
+        return summary or None
+
+    fresh: dict[str, str] = {}
+
+    def remember(doc, text: str) -> None:
+        fresh[doc.uid] = text
+
     digest = asyncio.run(run_news_digest(
         docs, summarizer, condenser, concurrency=concurrency, subject=subject,
-        with_deck=office, dry_run=dry_run))
-    job.say(f"      工作流完成，用时 {digest.elapsed:.1f}s")
+        with_deck=office, dry_run=dry_run,
+        plain_deck=bool(payload.get("deck_plain")),
+        lookup=lookup, on_summary=remember))
+    job.say(f"      工作流完成，用时 {digest.elapsed:.1f}s；"
+            f"概括新算 {len(fresh)} 条，复用 {len(digest.nodes) - len(fresh)} 条")
 
+    fingerprints = {d.uid: d.fingerprint for d in docs}
     with Store(state.db) as store:
         store.save_news_summaries(
             [{"uid": n.uid, "ordinal": n.ordinal, "backend": digest.backend,
-              "model": digest.model, "summary": n.summary} for n in digest.nodes])
+              "model": digest.model, "summary": n.summary,
+              "content_hash": fingerprints.get(n.uid, "")} for n in digest.nodes],
+            prompt_ver=NEWS_PROMPT_VERSION)
         store.save_news_report(backend=digest.condenser_backend or digest.backend,
                                model=digest.condenser_model or digest.model,
                                items=len(digest.nodes), span=digest.span,
@@ -388,17 +442,18 @@ def run_generate(state: "AppState", job: "Job", payload: dict) -> None:
     report_path = out_dir / "report.md"
     timeline_path = out_dir / "timeline.md"
     json_path = out_dir / "news_digest.json"
-    report_path.write_text(digest.report_md, encoding="utf-8")
-    timeline_path.write_text(digest.timeline_md, encoding="utf-8")
-    json_path.write_text(json.dumps(digest.to_dict(), ensure_ascii=False, indent=2),
-                         encoding="utf-8")
+    write_if_changed(report_path, digest.report_md)
+    write_if_changed(timeline_path, digest.timeline_md)
+    write_if_changed(json_path,
+                     json.dumps(digest.to_dict(), ensure_ascii=False, indent=2))
     job.say(f"      报告 / 时间轴已写出：{report_path.name}、{timeline_path.name}")
 
     if office:
         job.say("[4/4] 渲染 PPT 与 Word …")
         spec_path = out_dir / "deck_spec.json"
-        spec_path.write_text(json.dumps(digest.deck_spec or {}, ensure_ascii=False,
-                                        indent=2), encoding="utf-8")
+        write_if_changed(spec_path,
+                         json.dumps(digest.deck_spec or {}, ensure_ascii=False,
+                                    indent=2))
         render_py = find_render_python()
         if Path(render_py) != Path(sys.executable):
             job.say(f"      渲染用解释器：{render_py}")

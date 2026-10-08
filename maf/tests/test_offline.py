@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import io
 import json
 import socket
 import sys
@@ -272,6 +274,64 @@ class TestStore(unittest.TestCase):
         self.assertEqual(row["text"], "总览正文")
         self.assertEqual(row["condensed"], 1)
 
+    # ── 缓存三件套：重跑不许再堆一层行，正文没变就复用结论 ──
+    @staticmethod
+    def summary(url: str, text: str, backend: str = "local", model: str = "m") -> dict:
+        return {"url": url, "ordinal": 1, "backend": backend, "model": model,
+                "summary": text, "content_hash": "h1"}
+
+    def rows_in(self, table: str) -> int:
+        return int(self.store.conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+
+    def test_summary_cache_replaces_instead_of_stacking(self):
+        """手机上「14 页 28 条摘要」的直接病根：重跑一次就多一层。"""
+        self.store.save_summaries([self.summary("http://127.0.0.1/a", "第一版")], prompt_ver="v1")
+        self.store.save_summaries([self.summary("http://127.0.0.1/a", "第二版")], prompt_ver="v1")
+        self.assertEqual(self.rows_in("summaries"), 1)
+        self.assertEqual(self.store.load_summary_cache("local", "m", "v1"),
+                         {"http://127.0.0.1/a": ("h1", "第二版")})
+
+    def test_summary_cache_is_scoped_by_backend_and_prompt_version(self):
+        """换了模型或换了提示词就是另一把钥匙，旧结论不会串台。"""
+        self.store.save_summaries([self.summary("http://127.0.0.1/a", "v1 算的")], prompt_ver="v1")
+        self.store.save_summaries([self.summary("http://127.0.0.1/a", "云端算的",
+                                                backend="cloud")], prompt_ver="v1")
+        self.assertEqual(self.rows_in("summaries"), 2)
+        self.assertEqual(self.store.load_summary_cache("local", "m", "v1")["http://127.0.0.1/a"][1],
+                         "v1 算的")
+        self.assertEqual(self.store.load_summary_cache("cloud", "m", "v1")["http://127.0.0.1/a"][1],
+                         "云端算的")
+        self.assertEqual(self.store.load_summary_cache("local", "m", "v2"), {})
+
+    def test_summary_rows_dedupe_within_one_batch(self):
+        """同一批里重复的键也只留最后一条 —— 否则 DELETE 和 INSERT 会互相打架。"""
+        rows = [self.summary("http://127.0.0.1/a", "旧的"), self.summary("http://127.0.0.1/a", "新的")]
+        self.assertEqual(self.store.save_summaries(rows, prompt_ver="v1"), 1)
+        self.assertEqual(self.store.load_summary_cache("local", "m", "v1")["http://127.0.0.1/a"][1],
+                         "新的")
+
+    def test_news_summary_cache_roundtrip(self):
+        """喂给报告的那一步以前只写不读，每次重跑都要把 N 条再问一遍模型。"""
+        key = {"uid": "u1", "ordinal": 1, "backend": "local", "model": "m",
+               "summary": "概括一版", "content_hash": "h1"}
+        self.store.save_news_summaries([key], prompt_ver="v1")
+        self.store.save_news_summaries([dict(key, summary="概括二版")], prompt_ver="v1")
+        self.assertEqual(self.rows_in("news_summaries"), 1)
+        self.assertEqual(self.store.load_news_summary_cache("local", "m", "v1"),
+                         {"u1": ("h1", "概括二版")})
+
+    def test_date_inferences_roundtrip_and_upsert(self):
+        """日期推断结论按指纹落盘：问过的不再问第二遍。"""
+        self.store.save_date_inferences(
+            [{"fingerprint": "fp1", "date": "2026-09-01"},
+             {"fingerprint": "fp2", "date": ""},
+             {"fingerprint": "", "date": "2026-01-01"}],          # 空指纹丢掉
+            model="local:m")
+        self.assertEqual(self.store.load_date_cache(), {"fp1": "2026-09-01", "fp2": ""})
+        self.store.save_date_inferences([{"fingerprint": "fp1", "date": "2026-09-02"}], model="local:m")
+        self.assertEqual(self.rows_in("date_inferences"), 2)
+        self.assertEqual(self.store.load_date_cache()["fp1"], "2026-09-02")
+
 
 # ─────────────────────────── 工作流 ───────────────────────────
 class TestWorkflow(unittest.TestCase):
@@ -317,6 +377,7 @@ class TestEndToEndOffline(unittest.TestCase):
 
         with fake_site.serve() as (base, requests, _srv):
             rc = pipeline.main(["crawl", "--seed", base + "/", "--db", str(db),
+                                "--out-dir", str(out),
                                 "--max-pages", "20", "--max-depth", "1", "--delay", "0"])
             self.assertEqual(rc, 0)
             self.assertNotIn("/private/hidden.html", requests)
@@ -341,6 +402,67 @@ class TestEndToEndOffline(unittest.TestCase):
             self.assertIsNotNone(store.latest_digest())
             summaries = store.conn.execute("SELECT COUNT(*) c FROM summaries").fetchone()["c"]
             self.assertGreaterEqual(summaries, 12)
+
+    def test_cli_digest_twice_does_not_stack_or_rewrite(self):
+        """重跑一次 digest 应该几乎不干活：库里已有摘要就复用，产物没变就不重写。"""
+        tmp = Path(tempfile.mkdtemp())
+        db = tmp / "crawl.db"
+        out = tmp / "out"
+
+        with fake_site.serve() as (base, _requests, _srv):
+            self.assertEqual(pipeline.main(["crawl", "--seed", base + "/", "--db", str(db),
+                                            "--out-dir", str(out),
+                                            "--max-pages", "20", "--max-depth", "1",
+                                            "--delay", "0"]), 0)
+            args = ["digest", "--db", str(db), "--out-dir", str(out),
+                    "--dry-run", "--threshold", "10"]
+            self.assertEqual(pipeline.main(args), 0)
+            with Store(db) as store:
+                first = store.conn.execute("SELECT COUNT(*) c FROM summaries").fetchone()["c"]
+                self.assertGreaterEqual(first, 12)
+
+            stamp = (out / "pages.json").stat().st_mtime_ns
+            report = io.StringIO()
+            with contextlib.redirect_stdout(report), contextlib.redirect_stderr(report):
+                self.assertEqual(pipeline.main(args), 0)
+            said = report.getvalue()
+
+        with Store(db) as store:
+            second = store.conn.execute("SELECT COUNT(*) c FROM summaries").fetchone()["c"]
+            cached = store.load_summary_cache("local-stub", "stub", "v1")
+        self.assertEqual(second, first, "重跑不该在 summaries 里再叠一层")
+        self.assertEqual(len(cached), first, "已算好的摘要应该都能按缓存键读回来")
+        self.assertEqual((out / "pages.json").stat().st_mtime_ns, stamp,
+                         "crawl 已经导出过 pages.json，digest 不该再写一遍")
+        self.assertIn("复用已有 pages.json", said)
+
+
+# ─────────────────────────── 桌面应用后端 ───────────────────────────
+class TestAppServerOffline(unittest.TestCase):
+    def test_dry_run_generate_walks_the_whole_server_path(self):
+        """dry-run 下服务端整条路径要能跑通。
+
+        并发数按后端自动决定的那个分支以前只在非 dry-run 里 import，dry-run 会
+        NameError —— 这条用例就是那次的回归护栏。
+        """
+        from app import server as app_server
+
+        tmp = Path(tempfile.mkdtemp())
+        state = app_server.AppState(tmp / "app.db", tmp / "out",
+                                    host="127.0.0.1", port=0)
+        job = state.new_job("测试")
+        state.run_job(job, {
+            "text": "【2026-09-01】测试公告\n这是一条用来跑通流程的正文。\n\n"
+                    "【2026-09-03】第二条公告\n正文也在这里，够长了。",
+            "mode": "auto", "dry_run": True, "office": False,
+        })
+        self.assertEqual(job.status, "done", job.error)
+        self.assertTrue((tmp / "out" / "report.md").exists())
+        self.assertTrue((tmp / "out" / "timeline.md").exists())
+        with Store(tmp / "app.db") as store:
+            self.assertGreaterEqual(store.news_stats()["总数"], 1)
+            self.assertGreaterEqual(len(store.load_news_summary_cache(
+                "local-stub", "stub", "v1")), 1)
 
 
 if __name__ == "__main__":

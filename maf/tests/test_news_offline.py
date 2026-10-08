@@ -340,6 +340,40 @@ class TestDateFiller(unittest.TestCase):
         self.assertEqual([it.date for it in items],
                          ["2026-09-01", "2026-09-03", "2026-09-10"])
 
+    def test_fingerprint_depends_only_on_title_and_body(self):
+        a = parse_text(TEXT_PLAIN, mode="whole").items[0]
+        b = parse_text(TEXT_PLAIN, mode="whole").items[0]
+        b.ordinal = a.ordinal + 7
+        self.assertEqual(DateFiller.fingerprint(a), DateFiller.fingerprint(b))
+        b.body += "多了一句。"
+        self.assertNotEqual(DateFiller.fingerprint(a), DateFiller.fingerprint(b))
+
+    def test_cached_answer_is_used_without_a_model(self):
+        """问过的日期不该再问第二遍 —— 连模型都没有的时候也该答得出来。"""
+        items = parse_text(TEXT_PLAIN, mode="whole").items
+        fp = DateFiller.fingerprint(items[0])
+        seen: list[tuple[str, str]] = []
+        filler = DateFiller(None, lookup={fp: "2026-09-05"}.get,
+                            on_result=lambda k, v: seen.append((k, v)))
+        info = asyncio.run(filler.fill(items))
+        self.assertEqual(items[0].date, "2026-09-05")
+        self.assertEqual(items[0].date_source, "model")
+        self.assertEqual(info, {"asked": 0, "resolved": 1, "unknown": 0})
+        self.assertEqual(filler.hits, 1)
+        self.assertEqual(seen, [])          # 复用的结论不该再写一次
+
+    def test_same_body_is_only_asked_once(self):
+        """指纹相同的条目共用一条结论，不会一人问一遍模型。"""
+        one = parse_text(TEXT_PLAIN, mode="whole").items[0]
+        two = parse_text(TEXT_PLAIN, mode="whole").items[0]
+        two.ordinal = 2
+        fp = DateFiller.fingerprint(one)
+        filler = DateFiller(None, lookup={fp: "2026-09-05"}.get)
+        info = asyncio.run(filler.fill([one, two]))
+        self.assertEqual([one.date, two.date], ["2026-09-05", "2026-09-05"])
+        self.assertEqual(filler.hits, 1)
+        self.assertEqual(info["asked"], 0)
+
 
 # ─────────────────────────── 命令行 ───────────────────────────
 class TestCliOffline(unittest.TestCase):

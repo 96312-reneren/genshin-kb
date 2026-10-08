@@ -215,9 +215,11 @@ async function doGenerate() {
   payload.overrides = collectOverrides();
   payload.kinds = collectKindOverrides();
   payload.office = $('office').checked;
+  payload.deck_plain = $('deckPlain').checked;
   payload.fill = $('fill').checked;
   payload.dry_run = $('dry').checked;
   payload.fresh = $('fresh').checked;
+  payload.refresh = $('refresh').checked;
   if ($('cloud').checked) payload.condenser = 'cloud';
   if (!S.files.length && !$('pasted').value.trim()) { toast('先拖入或粘贴一些文本'); return; }
   $('genBtn').disabled = true;

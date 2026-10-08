@@ -67,9 +67,11 @@
     <h2><span class="step">③</span>生成与产物</h2>
     <div class="checks">
       <label><input type="checkbox" id="office" checked> 生成 PPT / Word / PDF</label>
+      <label><input type="checkbox" id="deckPlain" checked> 幻灯片要点直接按报告切分（省一次模型调用）</label>
       <label><input type="checkbox" id="fill" checked> 缺日期时用本地模型补抽</label>
       <label><input type="checkbox" id="cloud"> 报告改走云端模型（需凭据）</label>
       <label><input type="checkbox" id="fresh" checked> 本次从空库开始</label>
+      <label><input type="checkbox" id="refresh"> 忽略已存摘要，全部重新调模型</label>
       <label><input type="checkbox" id="dry"> 试跑（占位文案，不调用模型）</label>
     </div>
     <p class="hint" id="localHint"></p>

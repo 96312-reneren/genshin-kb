@@ -1,49 +1,36 @@
 #!/usr/bin/env bash
-# 本地模型服务入口 —— 迁移到 Windows + WSL 之后，本地推理从「手机上的
-# llama.cpp + qwen2.5-3b」换成「WSL 里的 ollama + qwen3:8b」。
+# 本地模型服务入口 —— 按环境自动挑实现，两条实现只监听回环，
+# 对 pipeline.py 来说都只是一个「OpenAI 兼容的本地服务」。
 #
-# 为什么要换：手机那份 llama.cpp 是 aarch64 的 .so/.bin，桌面跑不了；
-# 而 ollama 的官方 registry（registry.ollama.ai）在本机网络上被 DNS 污染成
-# 0.0.0.0，所以模型是用 hf-mirror 上的官方 gguf + 'ollama create' 注册进来的。
+#   找到 llama.cpp 的 llama-server（手机 proot / aarch64）
+#       → 走 local_llm_android.sh（固定端口 18080，无 token）
+#   找到 ollama（本机 WSL）
+#       → 走 local_llm_wsl.sh（端口 11434，WSL2 自动转发到 Windows 的 localhost）
 #
-# 对 pipeline.py 来说这仍然只是一个「OpenAI 兼容的本地服务」：
-# 端点是 http://127.0.0.1:11434/v1 ，llm.py 里 chat_completions 那条分支原样可用
-# （WSL2 会自动把 WSL 里的监听端口转发到 Windows 的 localhost）。
-#
-# 用法：
-#   WSL 里   : bash local_llm.sh
-#   Windows  : powershell -ExecutionPolicy Bypass -File local_llm.ps1
+# 想跳过自动判断：LOCAL_LLM=android bash local_llm.sh  或  LOCAL_LLM=wsl ...
 set -euo pipefail
 
-MODEL_TAG="${MODEL_TAG:-qwen3:8b}"
-PORT="${PORT:-11434}"
-BASE="http://127.0.0.1:${PORT}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LLAMA_DIR="${LLAMA_DIR:-/root/llamacpp/llama-b11345}"
+which="${LOCAL_LLM:-auto}"
 
-command -v ollama >/dev/null 2>&1 || {
-  echo "找不到 ollama。装：curl -fsSL https://ollama.com/install.sh | sh" >&2
-  exit 1
-}
-
-if ! pgrep -x ollama >/dev/null 2>&1; then
-  echo "启动 ollama serve（日志 /tmp/ollama.log）…"
-  OLLAMA_HOST="127.0.0.1:${PORT}" nohup ollama serve >/tmp/ollama.log 2>&1 &
-  for _ in $(seq 1 40); do
-    curl -sf --max-time 1 "$BASE/api/tags" >/dev/null 2>&1 && break
-    sleep 0.5
-  done
+if [[ "$which" == "auto" ]]; then
+  if [[ -x "$LLAMA_DIR/llama-server" ]]; then
+    which="android"
+  elif command -v ollama >/dev/null 2>&1; then
+    which="wsl"
+  else
+    which=""
+  fi
 fi
 
-if ! ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$MODEL_TAG"; then
-  echo "ollama 里没有 "$MODEL_TAG"，两条路：" >&2
-  echo "  a) 网络能到 registry.ollama.ai： ollama pull $MODEL_TAG" >&2
-  echo "  b) 本机走的是这条（推荐）：bash setup_local_model.sh" >&2
-  echo "     它会从 hf-mirror 下官方 gguf，并用正确的 ChatML 模板注册。" >&2
-  echo "     别自己写 'FROM xxx.gguf' 就 create —— ollama 不读 gguf 里的聊天模板，" >&2
-  echo "     生成出来的模型会把对话当纯文本续写，摘要全是废话。" >&2
-  exit 1
-fi
-
-echo "模型  : $MODEL_TAG"
-echo "监听  : $BASE/v1   （Windows 侧同样用 127.0.0.1:${PORT}，WSL 自动转发）"
-echo "已注册:"
-ollama list
+case "$which" in
+  android) exec bash "$HERE/local_llm_android.sh" ;;
+  wsl)     exec bash "$HERE/local_llm_wsl.sh" ;;
+  *)
+    echo "没有找到可用的本地推理后端：既没有 $LLAMA_DIR/llama-server，也没有 ollama。" >&2
+    echo "  手机 / aarch64：按 local_llm_android.sh 里的提示下 llama.cpp 预编译包" >&2
+    echo "  本机 / WSL    ：bash setup_local_model.sh（hf-mirror 下 gguf + ollama create）" >&2
+    exit 1
+    ;;
+esac

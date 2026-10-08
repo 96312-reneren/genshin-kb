@@ -28,19 +28,41 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
-from pptx import Presentation
-from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
-from pptx.oxml.ns import qn
-from pptx.util import Inches, Pt
 
-from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt as DocxPt
+def _missing_dep(name: str) -> str:
+    return (f"渲染 Office 产物需要 {name}，当前 Python（{sys.executable}）里没装。\n"
+            "装上就行；文字版产物不受影响，report.md / timeline.md / "
+            "news_digest.json 照常输出。\n"
+            f"    {sys.executable} -m pip install Pillow python-pptx python-docx\n"
+            "DSH 内置的 Python 一般已经带齐这三个包。")
+
+
+# 绘图与 Office 三件套都是可选的：手机 proot 环境里常常没装。缺了要报一句人话，
+# 而不是甩一段 ImportError 栈 —— 上层（app/server.py）是当子进程调它的。
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError as exc:                              # pragma: no cover
+    raise SystemExit(_missing_dep(f"Pillow（缺 {exc.name}）")) from None
+
+try:
+    from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN
+    from pptx.oxml.ns import qn
+    from pptx.util import Inches, Pt
+except ImportError as exc:                              # pragma: no cover
+    raise SystemExit(_missing_dep(f"python-pptx（缺 {exc.name}）")) from None
+
+try:
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Pt as DocxPt
+except ImportError as exc:                              # pragma: no cover
+    raise SystemExit(_missing_dep(f"python-docx（缺 {exc.name}）")) from None
 
 # ── 主题与版式常量 ──────────────────────────────────────────────
 INK = RGBColor(0x25, 0x2A, 0x38)
@@ -58,8 +80,24 @@ BODY_TOP = 1.62               # 正文起始高度
 FOOTER_Y = 6.86               # 页脚位置，留出 0.64in 下边距
 
 FONT_CJK = "Microsoft YaHei"
-FONT_FILES = [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyhbd.ttc",
-              r"C:\Windows\Fonts\simhei.ttf", r"C:\Windows\Fonts\simsun.ttc"]
+
+# Pillow 只认字体文件路径，没有「系统字体名」这一说。按 Windows → macOS →
+# Linux → Android 的顺序把常见中文字体排一遍。MAF_FONT 可以覆盖（指向自己那份字体）。
+FONT_FILES = [
+    r"C:\Windows\Fonts\msyh.ttc",
+    r"C:\Windows\Fonts\msyhbd.ttc",
+    r"C:\Windows\Fonts\simhei.ttf",
+    r"C:\Windows\Fonts\simsun.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    "/system/fonts/NotoSansCJK-Regular.ttc",
+    "/system/fonts/NotoSansSC-Regular.otf",
+    "/system/fonts/DroidSansFallback.ttf",
+]
 
 # 人工投喂版：所有材料都来自使用者本人，这份材料不访问任何网络接口
 SUBJECT_FALLBACK = "原神"
@@ -72,13 +110,41 @@ LANES = [("notices", "公告", (47, 62, 94)),
          ("info", "资讯", (110, 130, 120))]
 
 
+_FONT_CACHE: dict[int, object] = {}
+_font_warned = False
+
+
+def _extra_font() -> str:
+    import os
+    return os.environ.get("MAF_FONT", "").strip()
+
+
 def _pil_font(size: int):
-    for path in FONT_FILES:
+    """按字号缓存字体对象。
+
+    Pillow 每次 truetype() 都要重新解析字体文件（中文字体十几 MB 起步），
+    而 bar_chart / timeline_strip 里同一个字号会被反复要。找不到中文字体时
+    只警告一次 —— 悄悄画出一堆方框比报错还难查。
+    """
+    cached = _FONT_CACHE.get(size)
+    if cached is not None:
+        return cached
+    global _font_warned
+    extra = _extra_font()
+    for path in ([extra] if extra else []) + FONT_FILES:
         try:
-            return ImageFont.truetype(path, size)
+            font = ImageFont.truetype(path, size)
         except Exception:                              # noqa: BLE001
             continue
-    return ImageFont.load_default()
+        _FONT_CACHE[size] = font
+        return font
+    if not _font_warned:
+        _font_warned = True
+        print("没找到可用的中文字体，图上文字会变成方框。"
+              "把字体文件路径写进环境变量 MAF_FONT 可以修好。", file=sys.stderr)
+    fallback = ImageFont.load_default()
+    _FONT_CACHE[size] = fallback
+    return fallback
 
 
 # ── 信息图：全部本地按数据生成 ──────────────────────────────────

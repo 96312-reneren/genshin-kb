@@ -57,6 +57,10 @@ SUMMARY_MAX_TOKENS = 256
 REPORT_MAX_TOKENS = 1200
 DEFAULT_DOC_CHARS = 1500
 DEFAULT_CONCURRENCY = 4
+
+# 概括口径版本。改了 NODE_INSTRUCTIONS 或 `_one()` 里的提示词就加一，
+# 否则库里那些按老口径算出来的概括会被当成同一版继续复用。
+NEWS_PROMPT_VERSION = "v1"
 # 报告标题里的主题词 DEFAULT_SUBJECT 住在 content.py（界面层也要用同一个默认值）
 
 
@@ -90,8 +94,6 @@ class NewsDoc:
 
     def to_row(self) -> dict:
         """→ news_items 表的一行。存储层要求的键一个都不能少。"""
-        digest = hashlib.sha1(
-            f"{self.title}\n{self.text}".encode("utf-8")).hexdigest()[:16]
         return {
             "uid": self.uid, "game": self.game, "kind": self.kind,
             # post_id 只用来在 created_at 相同时定一个稳定次序
@@ -101,8 +103,18 @@ class NewsDoc:
             "created_at": int(self.created_at),
             "created_iso": self.created_iso,
             "source_api": self.source_api, "source_name": self.source_name,
-            "content_hash": digest, "fetched_at": self.fetched_at,
+            "content_hash": self.fingerprint, "fetched_at": self.fetched_at,
         }
+
+    @property
+    def fingerprint(self) -> str:
+        """正文指纹 —— 和写进 `news_items.content_hash` 的是同一个值。
+
+        概括缓存拿它判断「这条材料的正文有没有变过」：变了就得重算，
+        没变就该直接复用，而不是每次都把同一段正文再喂一遍模型。
+        """
+        return hashlib.sha1(
+            f"{self.title}\n{self.text}".encode("utf-8")).hexdigest()[:16]
 
 
 @dataclass
@@ -406,14 +418,20 @@ def _report_sections(by_kind: dict) -> list[str]:
 
 # ─────────────────────────── 执行器 ───────────────────────────
 class TimelineBuilder(Executor):
-    """输入 NewsBatch → 输出 Timeline（逐条一句话概括，顺序原样保持）"""
+    """输入 NewsBatch → 输出 Timeline（逐条一句话概括，顺序原样保持）
+
+    lookup / on_summary 是概括缓存的接缝：调用方（pipeline）知道库里
+    哪些 uid 已经有一条对应的概括，工作流本身不认识数据库。
+    命中就一条模型调用都不发 —— 本地 3B 上一条 7 秒，50 条就是 6 分钟。
+    """
 
     def __init__(self, backend: Backend, *, id: str = "timeline_builder",
                  concurrency: int = DEFAULT_CONCURRENCY,
                  max_tokens: int = SUMMARY_MAX_TOKENS,
                  doc_chars: int = DEFAULT_DOC_CHARS,
                  subject: str = DEFAULT_SUBJECT,
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False,
+                 lookup=None, on_summary=None) -> None:
         super().__init__(id=id)
         self.backend = backend
         self.subject = subject or DEFAULT_SUBJECT
@@ -422,8 +440,19 @@ class TimelineBuilder(Executor):
         self._max_tokens = max_tokens
         self._doc_chars = doc_chars
         self._dry_run = dry_run
+        self._lookup = lookup
+        self._on_summary = on_summary
+        self.hits = 0
 
     async def _one(self, idx: int, total: int, doc: NewsDoc) -> str:
+        # 缓存查询放在信号量外面：命中不该占并发额度，也不该排在队列里等
+        if self._lookup is not None:
+            cached = self._lookup(doc)
+            if cached:
+                self.hits += 1
+                print(f"      · 第 {idx}/{total} 条命中已存概括（省一次模型调用）",
+                      file=sys.stderr, flush=True)
+                return cached
         async with self._sem:
             if self._dry_run:
                 await asyncio.sleep(0)
@@ -439,9 +468,12 @@ class TimelineBuilder(Executor):
             )
             text = await _ask(_agent(self.backend, NODE_INSTRUCTIONS, self._max_tokens),
                               prompt, self.backend, max_tokens=self._max_tokens)
+            text = text or "（该条概括为空）"
+            if self._on_summary is not None:
+                self._on_summary(doc, text)
             print(f"      · 第 {idx}/{total} 条概括完成（{len(text)} 字）",
                   file=sys.stderr, flush=True)
-            return text or "（该条概括为空）"
+            return text
 
     @handler
     async def build(self, batch: NewsBatch,
@@ -454,10 +486,30 @@ class TimelineBuilder(Executor):
         print(f"[2/3] 时间轴逐条概括：{total} 条，后端 {self.backend.name}"
               f"（{self.backend.model}），并发 {self._limit}", file=sys.stderr, flush=True)
         t0 = time.monotonic()
-        summaries = list(await asyncio.gather(
-            *(self._one(i, total, d) for i, d in enumerate(docs, 1))))
-        print(f"      概括阶段用时 {time.monotonic() - t0:.1f}s",
-              file=sys.stderr, flush=True)
+        # return_exceptions=True：一条 429 / 连接重置不该让整批已经算好的概括全废。
+        # 但「全都失败」时还是得报错退出，不能产出一份空报告。
+        raw = await asyncio.gather(
+            *(self._one(i, total, d) for i, d in enumerate(docs, 1)),
+            return_exceptions=True)
+        summaries: list[str] = []
+        failures = 0
+        for i, item in enumerate(raw, 1):
+            if isinstance(item, asyncio.CancelledError):
+                raise item
+            if isinstance(item, BaseException):
+                failures += 1
+                summaries.append(f"（第 {i} 条概括失败：{type(item).__name__}）")
+                print(f"      · 第 {i}/{total} 条概括失败，继续跑其余的："
+                      f"{type(item).__name__}: {item}", file=sys.stderr, flush=True)
+            else:
+                summaries.append(item)
+        if failures and failures == total:
+            raise RuntimeError(f"{total} 条概括全部失败，第一条是：{raw[0]!r}")
+        spent = time.monotonic() - t0
+        extra = f"，其中 {self.hits} 条复用已存概括" if self.hits else ""
+        if failures:
+            extra += f"，{failures} 条失败已标注"
+        print(f"      概括阶段用时 {spent:.1f}s{extra}", file=sys.stderr, flush=True)
 
         nodes = [
             TimelineNode(ordinal=0, uid=d.uid, date=d.date_cn,
@@ -658,20 +710,28 @@ class DeckPlanner(Executor):
     def __init__(self, backend: Backend, *, id: str = "deck_planner",
                  max_tokens: int = DECK_MAX_TOKENS,
                  subject: str = DEFAULT_SUBJECT,
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False,
+                 plain: bool = False) -> None:
         super().__init__(id=id)
         self.backend = backend
         self.subject = subject or DEFAULT_SUBJECT
         self._max_tokens = max_tokens
         self._dry_run = dry_run
+        self._plain = plain
 
     @handler
     async def plan(self, digest: NewsDigest,
                    ctx: WorkflowContext[NewsDigest]) -> None:
-        print(f"[4/4] 生成幻灯片文案（后端 {self.backend.name}）…",
-              file=sys.stderr, flush=True)
         spec = _spec_from_body(digest.report_body)
-        if not self._dry_run and digest.report_body.strip():
+        if self._plain:
+            # 直接切分报告正文。少一次「整份报告再进模型」的调用 ——
+            # 在本地模型上，这一次调用的输入是全文，prefill 比输出贵得多。
+            print(f"[4/4] plain 模式：不调模型，直接按报告小节切出幻灯片要点",
+                  file=sys.stderr, flush=True)
+        else:
+            print(f"[4/4] 生成幻灯片文案（后端 {self.backend.name}）…",
+                  file=sys.stderr, flush=True)
+        if not self._plain and not self._dry_run and digest.report_body.strip():
             prompt = (
                 f"下面是《{digest.subject or self.subject}》内容观察报告的报告正文：\n\n"
                 f"{digest.report_body}\n\n"
@@ -824,21 +884,27 @@ def build_workflow(summarizer: Backend, condenser: Backend | None = None, *,
                    doc_chars: int = DEFAULT_DOC_CHARS,
                    subject: str = DEFAULT_SUBJECT,
                    with_deck: bool = False,
-                   dry_run: bool = False):
+                   dry_run: bool = False,
+                   plain_deck: bool = False,
+                   lookup=None, on_summary=None):
     """时间轴 → 报告（→ 幻灯片文案）。两段可以挂不同后端。
 
     默认两段同一个后端；给了 condenser 就是混合模式（逐条摘要走本地、
     最终报告走云端），这也是原项目 README 里主张的分工。
 
     with_deck=True 时再接一个 DeckPlanner：模型只产出结构化的要点 JSON，
-    真正的排版由 render_office.py 完成。
+    真正的排版由 render_office.py 完成。plain_deck=True 则跳过这一次模型调用，
+    直接用报告正文切出要点（本地模型上这一刀能省一整份报告正文的 prefill）。
+
+    lookup / on_summary 是概括缓存的接缝，见 TimelineBuilder。
     """
     condenser = condenser or summarizer
     subject = subject or DEFAULT_SUBJECT
     timeline = TimelineBuilder(summarizer, id="timeline_builder",
                                concurrency=concurrency,
                                max_tokens=summary_tokens, doc_chars=doc_chars,
-                               subject=subject, dry_run=dry_run)
+                               subject=subject, dry_run=dry_run,
+                               lookup=lookup, on_summary=on_summary)
     writer = ReportWriter(condenser, id="report_writer",
                           max_tokens=report_tokens, subject=subject,
                           dry_run=dry_run,
@@ -848,7 +914,7 @@ def build_workflow(summarizer: Backend, condenser: Backend | None = None, *,
     if with_deck:
         planner = DeckPlanner(condenser, id="deck_planner",
                               max_tokens=deck_tokens, subject=subject,
-                              dry_run=dry_run)
+                              dry_run=dry_run, plain=plain_deck)
         builder.add_edge(writer, planner)
     return builder.build()
 

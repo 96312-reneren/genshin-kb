@@ -41,8 +41,14 @@ run_app.bat
 2. **解析预览** —— 点「解析预览」后逐条列出来：日期、标题、类别、日期来源。
    **日期和类别都能在表格里直接改**（日期留空＝「日期未知」；类别决定它落在时间轴的哪条泳道）。
 3. **生成与产物** —— 勾选项：生成 PPT/Word/PDF、缺日期时用本地模型补抽、报告走云端、
-   本次从空库开始、试跑（用占位文案，不调模型）。点「开始生成」后进度和日志逐行刷出来，
+   本次从空库开始、试跑（用占位文案，不调模型）、**幻灯片要点直接按报告切分（省一次模型调用）**、
+   **忽略已存摘要全部重新调模型**。点「开始生成」后进度和日志逐行刷出来，
    结束后产物区列出文件，可以「打开」或「定位」。
+
+并发的默认值是「按后端自动」：本地单进程推理服务 1 路，云端 4 路。想手动压过它，命令行用
+`--concurrency N`，或者设环境变量 `MAF_LOCAL_CONCURRENCY` / `MAF_CLOUD_CONCURRENCY`。
+重复投喂同一批材料时，逐条概括与日期推断都会直接命中上次的结论；要它们重算，加 `--refresh`
+（或者在界面上勾「忽略已存摘要」）。
 
 界面是个本地网页：`app/server.py` 用标准库 `http.server` 只绑 `127.0.0.1` 的随机端口，
 `app/ui/` 是它的静态文件，窗口由 pywebview 提供（装不上时自动退回 Edge 的 `--app` 窗口）。
@@ -84,10 +90,13 @@ run_app.bat
 | `run_all.ps1` `run_all.bat` | 一键：起模型 → 投喂 → 工作流 → 渲染 → PDF |
 | `run_app.bat` | 打开工作台界面 |
 | `samples/示例材料.txt` | 演示用的自拟材料（含一条没有日期的条目） |
-| `tests/test_news_offline.py` | 76 项离线测试：切条 / 顺序 / 幂等 / 未知日期 / 产物合规 / CLI |
-| `local_llm.ps1` `local_llm.sh` | 启动 WSL 里的 ollama 并验证 localhost 转发 |
+| `tests/` | 86 项离线测试：切条 / 顺序 / 幂等 / 缓存 / 未知日期 / 产物合规 / CLI / 应用后端 |
+| `local_llm.sh` | 本地模型入口：按环境自动挑 `local_llm_wsl.sh`（ollama）或 `local_llm_android.sh`（llama.cpp） |
+| `local_llm.ps1` | Windows 侧入口：把 WSL 里的 ollama 拉起来并验证 localhost 转发 |
+| `local_llm_wsl.sh` | 本机实现：ollama + `qwen3:8b`，端口 11434 |
+| `local_llm_android.sh` | 手机 proot 实现：llama.cpp aarch64 + Qwen2.5-3B，端口 18080 |
 | `setup_local_model.sh` | 一次性装模型：hf-mirror 下 gguf + 正确 ChatML 模板注册成 `qwen3:8b` |
-| `tests/test_offline.py` `tests/fake_site.py` | 旧爬虫线的 36 项离线测试（见附录） |
+| `tests/fake_site.py` | 假站点：爬虫线离线测试的地基 |
 
 ## 关键设计
 
@@ -115,6 +124,11 @@ run_app.bat
 另外服务只接受 `Content-Type: application/json` 的 POST：跨站页面发不出这种请求
 （会先被浏览器预检挡住），这就是本地服务最省事的 CSRF 防护。
 
+**6. 写进库的东西要有人读回来。** 这条是补上去的：摘要、日期推断都落进了 SQLite，
+但一开始没有任何代码去**查**它们，于是「重跑」等于「重新付费」。现在每种结论都配了一个
+以内容指纹为键的缓存读口，写的时候顺手带上指纹，读的时候一比就知道还算不算数。
+缓存表用 `UNIQUE` 索引兜底，而不是靠调用方自觉去重 —— 手机上「14 页 28 条摘要」就是这么来的。
+
 ## 合规边界
 
 这条是硬约束，不是偏好 —— 这份东西是要拿出去给人看的作品：
@@ -137,6 +151,9 @@ run_app.bat
 
 **本地（默认，走这条）：** WSL Ubuntu 里的 ollama + `qwen3:8b`，Windows 侧通过
 `http://127.0.0.1:11434` 访问（WSL2 会自动把 WSL 内监听的端口转发到 Windows 的 localhost）。
+手机上则是 llama.cpp aarch64 + Qwen2.5-3B、端口 18080，见附录三。
+两条实现都不需要调用方知道区别 —— `bash local_llm.sh` 会按环境自动挑
+（`local_llm_wsl.sh` / `local_llm_android.sh`），`llm.py` 那边只是一个 OpenAI 兼容端点。
 
 **手动起模型，这是刻意的设计：** 应用和脚本都**不会**替你启动 WSL、不留常驻进程、不去拉 WSL 回来。
 你自己在 WSL 里跑 `ollama serve`（或 `sudo systemctl start ollama`），再打开应用即可。
@@ -181,14 +198,16 @@ run_app.bat
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_tests.ps1   # Windows
 bash run_tests.sh                                        # WSL / Linux
-# Ran 76 tests in 23.4s — OK
+# Ran 86 tests in 26.9s — OK
 ```
 
 整个模块跑在 `no_external_socket()` 里：`socket.getaddrinfo` 与 `socket.create_connection`
-对任何非回环目标直接抛异常，所以「不出网」不是靠自觉。76 项覆盖：日期写法的确定性解析、
+对任何非回环目标直接抛异常，所以「不出网」不是靠自觉。86 项覆盖：日期写法的确定性解析、
 三种切分方式、内容指纹幂等、顺序读回、未知日期排最后、审计列全 0、
 时间轴/报告里的出处与合规措辞、空批次、`DateFiller` 无模型时不发请求、
-CLI `ingest`+`news-report --dry-run` 端到端、幻灯片要点 JSON 的容错解析、源码里没有网络路径。
+日期结论缓存的往返与「同一段正文只问一次」、摘要缓存「重跑不叠行」与按后端/提示词版本隔离、
+`pages.json` 不重复写、CLI `ingest`+`news-report --dry-run` 端到端、
+桌面应用后端 dry-run 全路径、幻灯片要点 JSON 的容错解析、源码里没有网络路径。
 
 实测一遍（`samples/示例材料.txt`，11 条材料、本地 qwen3:8b）：
 
@@ -202,6 +221,52 @@ CLI `ingest`+`news-report --dry-run` 端到端、幻灯片要点 JSON 的容错�
 
 报告里的数字全部可从时间轴复算：跨度 137 天、间隔中位数 17 天、最长 21 天、平均 0.51 条/周、
 版本节点 4 个（5.6 / 5.7 / 5.8 / 6.0），「日期未知 1 条」明确标注不计入统计。
+
+## 性能：重跑不再从头付费
+
+这条流水线上最贵的一步永远是「把正文喂给模型」，而原来的实现是**只写不读**：
+摘要落库之后没有任何人再查它一眼，于是同一份材料每跑一次就重新问一遍模型。
+手机上的库就是这么变成「14 页存了 28 条摘要」的 —— 不是数据错乱，是白付了一轮模型钱。
+
+现在三处都补上了「读」这一半，写下去的东西会先被读回来：
+
+| 缓存 | 键 | 重跑时的行为 |
+|---|---|---|
+| 逐页 / 逐条摘要 | `(url 或 uid, backend, model, prompt_ver)` | 正文指纹没变就直接抄库里的结论，一次模型都不调 |
+| 日期推断结论 | 标题 + 正文的指纹 | 问过的日期不再问第二遍；**模型根本没起的时候也能答出来** |
+| 本地服务探测 | `(base_url, token)` | 一次运行里同一地址只探一次，不再问四遍 |
+| 并发路数 | 按后端类型自动 | 本地单进程服务 1 路，云端 4 路 |
+
+几个容易忽略但确实吃时间的点，也一并处理了：
+
+- **`pages.json` 由 crawl 导出一次就够。** 以前 `digest` 每次都整库重新导出，默认还带全文。
+  现在 `digest` 发现文件在就直接复用；`export_json` 也改成逐页流式落盘，峰值内存从
+  「约两倍正文」降到「一页」。
+- **产物内容没变就不重写。** `summary.md` / `digest.json` / `report.md` / `timeline.md` /
+  `news_digest.json` / `deck_spec.json` 全部走 `write_if_changed`；在 `/sdcard` 上每次几百 KB
+  的写都要过一遍 FUSE，还会让 git 里堆满「内容一样、时间戳变了」的改动。
+- **`upsert_links` 补上事务。** 原来是 executemany 但没有 `with self.conn:`，等于每行一次
+  autocommit；在手机存储上每行一次 fsync。
+- **端口扫描并行化。** `probe-local --scan` 默认要串行试 64512 个端口，RST 快的话 20–65s，
+  被 DROP 时最坏 6.3 小时；现在按 4096 一块、128 路并发，约三分钟量级，并且会打印进度。
+- **一条摘要失败不再毁掉整批。** `asyncio.gather` 加了 `return_exceptions=True`（取消仍然
+  向外抛），失败的条目在报告里标成「（第 N 条概括失败：…）」，已经付过钱的那 N-1 条不会白扔。
+- **`--deck-plain`：幻灯片要点直接按报告小节切分**，不再为此单独调一次模型。
+
+最省时间的那一项是摘要缓存：一条材料重跑一次，从「每条一次模型调用」变成零次。
+`--refresh` 可以强制忽略所有已存结论全部重算，界面上的「忽略已存摘要，全部重新调模型」
+复选框是同一件事。
+
+## 跨平台与缺依赖
+
+`render_office.py` 原先的字体表里只有 `C:\Windows\Fonts\...` 四条路径，换到 Linux、macOS 或
+Android 上必然全部落空、退到 `ImageFont.load_default()` —— **图上的中文会全变成方框**。
+现在字体候选按 Windows → macOS → Linux → Android 排列，找不到时只在 stderr 提醒一次，
+并且可以用环境变量 `MAF_FONT` 直接指定字体文件路径。
+
+绘图三件套（Pillow / python-pptx / python-docx）改成按需 import：缺哪个就打印一句
+「缺什么包、怎么装」，而不是甩一个 ImportError 堆栈。缺了它们只影响图片与 Office 产物，
+文字版（md / json）照常产出。
 
 ## 成品长什么样
 
@@ -253,6 +318,30 @@ robots.txt 遵循到什么程度：
 **模型没有跟着搬**：手机那份是 aarch64 的 `llama-server` 加 gguf，Windows 上跑不了，也不该搬。
 本地推理换成 WSL 的 ollama 之后，对流水线来说它仍然只是一个 OpenAI 兼容的本地服务。
 
+## 附录三：在手机 proot 里跑（aarch64 + llama.cpp）
+
+同一份代码也跑在手机的 DSHA proot 环境里。差异只有「本地模型是谁」和「怎么起」，
+都在 `local_llm_android.sh` 里固化了：
+
+```bash
+bash local_llm.sh          # 自动判断：有 llama-server 就走安卓这条
+# 等价于
+LOCAL_LLM=android bash local_llm.sh
+```
+
+- **llama.cpp 官方预编译 aarch64 包**（`b11345`），github.com 直链被墙，走 `gh-proxy.com` 镜像；
+  模型从 `hf-mirror.com` 下 `qwen2.5-3b-instruct-q4_k_m.gguf`。
+- **端口固定 18080**，只绑回环、无 token。用官方包自己起服务，而不是用 DesktopAI App 的那个：
+  它的端口随机分配、token 在 Java 侧生成且不落盘，外部进程没有对接点。
+- **MAF 的坑**：`OpenAIChatClient` 走的是 Responses API，而 llama.cpp 只有
+  `/v1/chat/completions` —— 本地后端必须用 `OpenAIChatCompletionClient`（Chat Completions）。
+  `llm.py` 的 `chat_completions` 分支就是为这条线留的。
+- **不要开 `-np`**：8 核实测 Qwen2.5-3B 跑 14 页摘要，`-np 1` 是 102.2s，`-np 4` 反而 115.6s；
+  线程早打满了，分槽只剩调度开销。这正是 `default_concurrency()` 把本地后端默认压到 1 路的原因。
+- **中文字体**：Android 没有 `C:\Windows\Fonts`，现在字体候选里带了
+  `/system/fonts/NotoSansCJK-Regular.ttc` 等路径；实在找不到可以用 `MAF_FONT=/path/to/font.ttf` 指定。
+- 手机上的 Python 在 proot 的 `/root/venvs/maf/bin/python`，`run_tests.sh` 的回落链里已经包含它。
+
 ## 已知限制
 
 - 切条是**规则驱动**的：日期行/标题行/空行/整篇四种模式里选一个。同一条正文里出现空行时，
@@ -264,3 +353,10 @@ robots.txt 遵循到什么程度：
 - pywebview 在个别环境可能需要 `pythonnet`；装不上会自动退回 Edge 的 `--app` 窗口，
   功能不受影响（只是少一个独立窗口外壳）。
 - 云端的 `/v1/responses` 端点按 DeepSeek 的返回格式适配；换厂商要改 `llm.py` 的后端构造。
+- 缓存键里带着 `prompt_ver`（当前 `v1`）与模型名：改了提示词或换了模型，旧结论**不会**被误用，
+  但也不会自动重算，得靠 `--refresh` 或下一次正文变化触发。改提示词时记得把 `PROMPT_VERSION` /
+  `NEWS_PROMPT_VERSION` 一起加一。
+- `probe-local --scan` 并行扫描是**按块**提交的，进度按 8192 个端口打印一次；
+  端口被静默丢弃（DROP）而不是拒绝（RST）时，仍要等满超时，只是不再逐个人肉排队。
+- 图片与 Office 产物需要 Pillow / python-pptx / python-docx；缺了它们文字版照常产出，
+  中文字体则可以用 `MAF_FONT` 指定，否则靠内置候选表猜。
