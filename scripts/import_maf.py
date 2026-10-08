@@ -341,6 +341,13 @@ def main():
                          r.get("backend"), r.get("model"), r.get("summary"),
                          r.get("created_at"), is_primary))
 
+    # 表上有 UNIQUE(uid, backend, model, summary)：同一材料 + 同一模型 + 同一段文字的
+    # 重复概括只会留下一条。如果先插入的是 is_primary=0 的那条，主概括就会在去重中被丢掉，
+    # 该条目在页面上会没概括可展示（而且下游的关联匹配也拿不到它的概括文本）。
+    # 所以这里把主概括排到前面，让它在去重中胜出；排完再重排一次 id。
+    sum_rows.sort(key=lambda row: -row[8])
+    sum_rows = [tuple([i + 1] + list(row[1:])) for i, row in enumerate(sum_rows)]
+
     # ---- 报告：每个来源库选一份主报告 ----
     rep_rows, prim_report = [], set()
     by_db = {}
@@ -445,7 +452,17 @@ def main():
     else:
         print("  第三方镜像线正文入库: 0 条；主动放弃正文 %d 条，只留标题+日期+出处+派生概括"
               % body_withheld)
-    print("  没有主概括的条目: %d" % (len(item_rows) - len(prim_by_uid)))
+    # 从库里回读，验证「每个条目都有恰好一条主概括」—— 这是去重与插入顺序是否正确的判据
+    if args.dry_run:
+        prim_in_db = sum(1 for r in sum_rows if r[8])
+    else:
+        prim_in_db = kb.execute(
+            "SELECT COUNT(DISTINCT item_id) FROM maf_summaries WHERE is_primary=1"
+        ).fetchone()[0]
+    print("  落库后有主概括的条目: %d / %d%s"
+          % (prim_in_db, len(item_rows),
+             "" if prim_in_db == len(item_rows)
+             else "  ← 有条目没拿到主概括，检查 maf_summaries 的 UNIQUE 约束与插入顺序"))
     print("  没有主报告的来源库: %d"
           % (len(by_db) - len({db for db, _ in prim_report})))
 
